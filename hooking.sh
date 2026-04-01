@@ -43,14 +43,14 @@ conectar_adb() {
 }
 
 # =====================
-# SCAN DE ARQUIVOS MODIFICADOS (data/hora + caminho completo)
+# SCAN DE ARQUIVOS MODIFICADOS + MREPLAYS
 # =====================
 scan_freefire_files() {
     local pkg="$1"
     local nome="$2"
 
     echo ""
-    echo "🎮 [ARQUIVOS MODIFICADOS - $nome]"
+    echo "🎮 [ARQUIVOS MODIFICADOS E REPLAYS - $nome]"
     echo "════════════════════════════════════════════════════"
 
     DIRS=(
@@ -64,15 +64,25 @@ scan_freefire_files() {
     found=0
     for dir in "${DIRS[@]}"; do
         if [ -d "$dir" ]; then
-            echo "📁 Pasta: $dir"
+            echo "📁 Pasta analisada: $dir"
 
-            echo "   📂 Arquivos modificados (data/hora completa + caminho):"
-            find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS  %p\n' 2>/dev/null | sort -r | head -n 35 | while read -r line; do
+            # Todos os arquivos modificados (data/hora completa + caminho completo)
+            echo "   📂 Arquivos modificados recentemente:"
+            find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS  %p\n' 2>/dev/null | sort -r | head -n 40 | while read -r line; do
                 echo "      $line"
                 found=1
             done
 
-            echo "   🎥 Replays / Gravações:"
+            # Busca específica por MReplays
+            echo "   🎥 MReplays encontrados:"
+            find "$dir" -type f -iname "*MReplays*" -o -iname "*mreplay*" 2>/dev/null | while read -r file; do
+                mod_date=$(stat -c "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)
+                echo "      📼 $mod_date → $file"
+                found=1
+            done
+
+            # Replays gerais
+            echo "   🎥 Outros replays / gravações:"
             find "$dir" -type f \( -iname "*replay*" -o -iname "*record*" -o -iname "*highlight*" -o -iname "*.mp4" -o -iname "FFReplay*" \) 2>/dev/null | while read -r file; do
                 mod_date=$(stat -c "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)
                 echo "      📼 $mod_date → $file"
@@ -82,12 +92,12 @@ scan_freefire_files() {
     done
 
     if [ $found -eq 0 ]; then
-        echo "✅ Nenhum arquivo encontrado para $nome"
+        echo "✅ Nenhum arquivo relevante encontrado para $nome"
     fi
 }
 
 # =====================
-# FUNÇÃO PRINCIPAL DE SCAN (CORRIGIDA)
+# FUNÇÃO PRINCIPAL DE SCAN
 # =====================
 fazer_scan() {
     clear
@@ -103,7 +113,7 @@ fazer_scan() {
     echo "📅 Scan iniciado: $DATE"
     echo "──────────────────────────────"
 
-    # Varredura global de hooks
+    # Varredura global
     echo ""
     echo "🔎 [VARREDURA GLOBAL - HOOKS / CHEATS]"
     > "$TMP"
@@ -119,7 +129,7 @@ fazer_scan() {
     cat "${TMP}_clean" >> "$SCAN_FILE"
 
     if [ -s "${TMP}_clean" ]; then
-        echo "🚨 ARQUIVOS SUSPEITOS ENCONTRADOS:"
+        echo "🚨 ARQUIVOS SUSPEITOS:"
         cat "${TMP}_clean"
         score=$((score+15))
     else
@@ -138,20 +148,15 @@ fazer_scan() {
         echo "✅ Nenhum arquivo crítico encontrado"
     fi
 
-    # FONTE DE INSTALAÇÃO VIA TODAS AS LOGS
+    # FONTE DE INSTALAÇÃO VIA LOGS (todas as logs do sistema)
     echo ""
     echo "📦 [FONTE DE INSTALAÇÃO VIA LOGS DO SISTEMA]"
-    echo "Buscando em TODAS as logs do Android..."
-
     for game in "com.dts.freefireth:Free Fire NORMAL" "com.dts.freefiremax:Free Fire MAX"; do
         pkg="${game%%:*}"
         nome="${game##*:}"
-
         echo ""
         echo "🎮 $nome ($pkg)"
-
-        INSTALL_LOGS=$(logcat -d -v time -b all 2>/dev/null | grep -i "$pkg" | grep -iE 'install|installer|package.*added|pm install|app installed|installed package' | tail -n 25)
-
+        INSTALL_LOGS=$(logcat -d -v time -b all 2>/dev/null | grep -i "$pkg" | grep -iE 'install|installer|package.*added|pm install|app installed' | tail -n 30)
         if [ -n "$INSTALL_LOGS" ]; then
             echo "   📅 Registros de instalação encontrados:"
             echo "$INSTALL_LOGS" | while read -r line; do
@@ -159,52 +164,56 @@ fazer_scan() {
                 relato=$(echo "$line" | cut -d' ' -f3-)
                 echo "      $ts → $relato"
             done
-            score=$((score+10))
         else
-            echo "   ⚠️  Nenhum registro de instalação encontrado nas logs para este jogo"
+            echo "   ⚠️  Nenhum registro de instalação encontrado nas logs"
         fi
     done
 
-    # PAREAMENTO WIFI DEBUG (corrigido)
+    # =====================
+    # DETECÇÃO DE PAREAMENTO / DESPAREAMENTO (TRAZIDO DE VOLTA - O MAIS IMPORTANTE)
+    # =====================
     echo ""
-    echo "🔗 [PAREAMENTO / DESPAREAMENTO WIFI DEBUG]"
-    EVENTS=$(logcat -d -v time -b all 2>/dev/null | grep -iE 'pairing|unpair|pareamento|despareamento|forget|remove|AdbDebuggingManager|wifi.*debug|adb.*wireless' | tail -n 80)
+    echo "🔗 [PAREAMENTO / DESPAREAMENTO ADB / WIFI DEBUG]"
+    echo "Buscando em TODAS as logs do sistema..."
+
+    EVENTS=$(logcat -d -v time -b all 2>/dev/null | grep -iE 'pairing|unpair|pareamento|despareamento|forget|remove|AdbDebuggingManager|wifi.*debug|adb.*wireless|WirelessDebug|adb.*pair' | tail -n 100)
 
     if [ -n "$EVENTS" ]; then
-        echo "🚨 Registros encontrados:"
+        echo "🚨 REGISTROS ENCONTRADOS:"
         echo "$EVENTS" | while read -r line; do
             ts=$(echo "$line" | awk '{print $1 " " $2}')
             relato=$(echo "$line" | cut -d' ' -f3-)
             
-            tipo="EVENTO"
             if echo "$line" | grep -qiE "pairing|pareamento"; then
                 tipo="PAREAMENTO"
             elif echo "$line" | grep -qiE "unpair|despareamento|forget|remove"; then
                 tipo="DESPAREAMENTO"
+            else
+                tipo="EVENTO ADB"
             fi
             
             echo "   📅 $ts → [$tipo] $relato"
         done
-        score=$((score+20))
+        score=$((score+25))
         wo_recomendado=1
     else
-        echo "✅ Nenhum registro de pareamento encontrado"
+        echo "✅ Nenhum registro de pareamento/despareamento encontrado"
     fi
 
-    # Arquivos modificados
+    # Arquivos modificados + MReplays
     echo ""
-    echo "🎥 [ARQUIVOS MODIFICADOS E REPLAYS]"
+    echo "🎥 [ARQUIVOS MODIFICADOS E MREPLAYS]"
     scan_freefire_files "com.dts.freefireth" "Free Fire NORMAL"
     scan_freefire_files "com.dts.freefiremax" "Free Fire MAX"
 
     # Resultado final
     echo ""
     echo "═══════════════ RESULTADO FINAL ═══════════════"
-    if [ $score -ge 45 ]; then
+    if [ $score -ge 50 ]; then
         status="💀 CRÍTICO"
-    elif [ $score -ge 30 ]; then
+    elif [ $score -ge 35 ]; then
         status="🚨 ALTAMENTE SUSPEITO"
-    elif [ $score -ge 15 ]; then
+    elif [ $score -ge 20 ]; then
         status="⚠️  SUSPEITO"
     else
         status="✅ LIMPO"
