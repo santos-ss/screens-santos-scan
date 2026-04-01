@@ -44,29 +44,68 @@ conectar_adb() {
 }
 
 # =====================
-# FUNÇÃO PRINCIPAL DE SCAN
+# NOVA FUNÇÃO: SCAN DE REPLAYS E MODIFICAÇÕES
+# =====================
+scan_freefire_replays() {
+    local pkg="$1"
+    local nome="$2"
+
+    echo ""
+    echo "🎮 [REPLAYS E MODIFICAÇÕES - $nome]"
+    echo "══════════════════════════════════════"
+
+    DIRS=(
+        "/storage/emulated/0/Android/data/$pkg/files"
+        "/storage/emulated/0/Android/data/$pkg"
+        "/data/data/$pkg/files"
+        "/data/data/$pkg/cache"
+    )
+
+    found=0
+
+    for dir in "${DIRS[@]}"; do
+        if [ -d "$dir" ]; then
+            # Replays e gravações
+            find "$dir" -type f \( -name "*replay*" -o -name "*record*" -o -name "*highlight*" -o -name "*.mp4" -o -name "*.replay" -o -name "FFReplay*" \) 2>/dev/null | while read -r file; do
+                mod_date=$(stat -c "%y" "$file" 2>/dev/null | cut -d. -f1)
+                echo "   📼 REPLAY → $mod_date | $file"
+                found=1
+            done
+
+            # Arquivos modificados recentemente
+            echo "   📂 Arquivos modificados recentemente:"
+            find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -r | head -n 25
+            found=1
+        fi
+    done
+
+    if [ $found -eq 0 ]; then
+        echo "✅ Nenhum replay ou modificação recente encontrada para $nome"
+    fi
+}
+
+# =====================
+# FUNÇÃO PRINCIPAL DE SCAN (MELHORADA)
 # =====================
 fazer_scan() {
-    local pacote="$1"
-    local nome="$2"
-    
     clear
     echo "╔════════════════════════════════════╗"
-    echo "║     ESCANEANDO: $nome              ║"
+    echo "║     ESCANEANDO AMBOS FREE FIRE     ║"
     echo "╚════════════════════════════════════╝"
     echo ""
 
     DATE=$(date +"%Y-%m-%d %H:%M:%S")
     score=0
+    wo_recomendado=0   # Controle para W.O
 
     echo "📅 $DATE"
     echo "──────────────────────────────"
 
     # =====================
-    # VARREDURA GLOBAL DE ARQUIVOS
+    # VARREDURA GLOBAL
     # =====================
     echo ""
-    echo "🔎 [VARREDURA GLOBAL]"
+    echo "🔎 [VARREDURA GLOBAL - HOOKS / CHEATS]"
     > "$TMP"
 
     PATHS="/storage/emulated/0 /sdcard /data/local/tmp /data/data /data/app /data/adb"
@@ -78,108 +117,108 @@ fazer_scan() {
 
     sort -u "\( TMP" > " \){TMP}_clean"
 
-    echo "🔍 Salvando lista em: $SCAN_FILE"
+    echo "🔍 Salvando relatório em: $SCAN_FILE"
     echo "=== H O O K I N G SCAN - $DATE ===" > "$SCAN_FILE"
     echo "Total suspeitos: \( (wc -l < " \){TMP}_clean")" >> "$SCAN_FILE"
     cat "${TMP}_clean" >> "$SCAN_FILE"
 
     if [ -s "${TMP}_clean" ]; then
-        echo "🚨 ARQUIVOS SUSPEITOS:"
+        echo "🚨 ARQUIVOS SUSPEITOS ENCONTRADOS:"
         cat "${TMP}_clean"
-        score=$((score+10))
+        score=$((score+15))
     else
-        echo "✅ Nenhum arquivo suspeito encontrado"
+        echo "✅ Nenhum arquivo suspeito global encontrado"
     fi
 
     # =====================
-    # VERIFICAÇÕES MAGISK AVANÇADAS
+    # ARQUIVOS CRÍTICOS (NOVO ALERTA FORTE)
     # =====================
     echo ""
-    echo "🧬 [MAGISK - DETECÇÃO AVANÇADA]"
+    echo "☢️ [ALERTA ARQUIVOS CRÍTICOS - FREE FIRE]"
+
+    CRITICAL_PATTERNS="libanort|libanort64|libhook|libcheat|libinject|libfrida|libzygisk|liblsposed|libmagisk|ffcheat|freefirehack|aimbot|wallhack|esp"
+
+    critical_found=$(find /data/data/com.dts.freefireth /data/data/com.dts.freefiremax /storage/emulated/0/Android/data/com.dts.freefire* -type f 2>/dev/null | grep -iE "$CRITICAL_PATTERNS" | head -n 10)
+
+    if [ -n "$critical_found" ]; then
+        echo "💥 ARQUIVOS CRÍTICOS DETECTADOS (ALTO RISCO DE CHEAT):"
+        echo "$critical_found"
+        score=$((score+25))
+        wo_recomendado=1
+        echo "⚠️  ALERTA MÁXIMO: ARQUIVOS DE CHEAT NATIVOS ENCONTRADOS!"
+    else
+        echo "✅ Nenhum arquivo crítico (libhook, aimbot, etc.) encontrado"
+    fi
+
+    # =====================
+    # MAGISK + ROOT (mantido e reforçado)
+    # =====================
+    echo ""
+    echo "🧬 [MAGISK / ROOT DETECÇÃO AVANÇADA]"
 
     magisk_detectado=0
 
-    # 1. Pacotes Magisk
-    pkgs=$(adb shell "pm list packages 2>/dev/null | grep -E 'magisk|io.github.huskydg.magisk'")
-    if [ -n "$pkgs" ]; then
-        echo "❌ Pacote Magisk encontrado:"
-        echo "$pkgs"
+    if pm list packages 2>/dev/null | grep -qE 'magisk|io.github.huskydg.magisk'; then
+        echo "❌ Pacote Magisk detectado"
         magisk_detectado=1
-        score=$((score+15))
+        score=$((score+20))
+        wo_recomendado=1
     fi
 
-    # 2. Diretórios Magisk
-    for dir in /data/adb/magisk /sbin/.magisk /data/adb/modules /data/adb/ksu /cache/magisk.log; do
-        if adb shell "test -e $dir" 2>/dev/null; then
-            echo "❌ Diretório Magisk: $dir"
+    for dir in /data/adb/magisk /sbin/.magisk /data/adb/modules /data/adb/ksu; do
+        if [ -e "$dir" ]; then
+            echo "❌ Diretório root/magisk: $dir"
             magisk_detectado=1
-            score=$((score+12))
+            score=$((score+18))
+            wo_recomendado=1
         fi
     done
 
-    # 3. Processos Magisk
-    procs=$(adb shell "ps -ef 2>/dev/null | grep -E 'magiskd|zygisk|magisk'" | grep -v grep)
-    if [ -n "$procs" ]; then
-        echo "❌ Processo Magisk em execução:"
-        echo "$procs"
-        magisk_detectado=1
-        score=$((score+18))
-    fi
-
-    # 4. Mounts Magisk
-    mounts=$(adb shell "cat /proc/mounts 2>/dev/null | grep -i magisk")
-    if [ -n "$mounts" ]; then
-        echo "❌ Mount Magisk detectado"
-        echo "$mounts"
-        magisk_detectado=1
-        score=$((score+14))
-    fi
-
     if [ $magisk_detectado -eq 0 ]; then
-        echo "✅ Nenhum vestígio de Magisk encontrado"
+        echo "✅ Nenhum vestígio forte de Magisk/Root encontrado"
     fi
 
     # =====================
-    # WIFI DEBUG / PAIRING
+    # REPLAYS E MODIFICAÇÕES (ambos jogos)
     # =====================
     echo ""
-    echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
-
-    EVENTS=$(logcat -b all -d 2>/dev/null | grep -iE "pairing|unpair|forget|remove|AdbDebuggingManager|brevent|shizuku" | tail -n 15)
-    if [ -n "$EVENTS" ]; then
-        echo "$EVENTS" | while read -r line; do
-            ts=$(echo "$line" | awk '{print $1 " " $2}')
-            echo "   • $ts → $line"
-        done
-        score=$((score+15))
-    else
-        echo "✅ Nenhum pairing/desparelhamento recente"
-    fi
+    echo "🎥 [REPLAYS E ARQUIVOS MODIFICADOS PÓS-PARTIDA]"
+    scan_freefire_replays "com.dts.freefireth" "Free Fire NORMAL"
+    scan_freefire_replays "com.dts.freefiremax" "Free Fire MAX"
 
     # =====================
-    # RESULTADO FINAL
+    # RESULTADO FINAL + W.O
     # =====================
     echo ""
-    echo "════════ RESULTADO ════════"
+    echo "═══════════════ RESULTADO FINAL ═══════════════"
 
-    if [ $score -ge 35 ]; then
-        status="💀 CRITICO"
-    elif [ $score -ge 20 ]; then
-        status="🚨 SUSPEITO"
-    elif [ $score -ge 12 ]; then
-        status="⚠️ ATENÇÃO"
+    if [ $score -ge 40 ]; then
+        status="💀 CRÍTICO - CHEAT PROVÁVEL"
+    elif [ $score -ge 25 ]; then
+        status="🚨 ALTAMENTE SUSPEITO"
+    elif [ $score -ge 15 ]; then
+        status="⚠️  SUSPEITO"
     else
         status="✅ LIMPO"
     fi
 
     echo "Score  : $score"
     echo "Status : $status"
+
+    if [ $wo_recomendado -eq 1 ]; then
+        echo ""
+        echo "══════════════════════════════════════════════"
+        echo "🚨 APLIQUE O W.O!"
+        echo "Você caiu pro Santos e R3, HOOKING DOMINA!"
+        echo "══════════════════════════════════════════════"
+    fi
+
     echo ""
     echo "📄 Relatório completo salvo em: $SCAN_FILE"
 
     echo ""
     echo "╔════════════════════════════════════╗"
-    echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
+    echo "║     ✔ SCAN FINALIZADO (AMBOS FF)   ║"
     echo "╚════════════════════════════════════╝"
 
     echo ""
@@ -197,8 +236,7 @@ while true; do
     echo "╚════════════════════════════════════╝"
     echo ""
     echo "   [0] 🔌 Conectar via ADB"
-    echo "   [1] 🎮 Escanear Free Fire Normal"
-    echo "   [2] 🎮 Escanear Free Fire MAX"
+    echo "   [1] 🎮 Escanear Free Fire (NORMAL + MAX)"
     echo "   [S] ❌ Sair"
     echo ""
     echo -n "   Escolha: "
@@ -206,8 +244,7 @@ while true; do
 
     case "$opcao" in
         0) conectar_adb ;;
-        1) fazer_scan "com.dts.freefireth" "Free Fire Normal" ;;
-        2) fazer_scan "com.dts.freefiremax" "Free Fire MAX" ;;
+        1) fazer_scan ;;
         s|S) 
             echo "Obrigado por usar H O O K I N G!"
             exit 0 
