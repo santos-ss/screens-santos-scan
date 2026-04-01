@@ -43,7 +43,7 @@ conectar_adb() {
 }
 
 # =====================
-# SCAN DE ARQUIVOS MODIFICADOS + MREPLAYS
+# SCAN DE ARQUIVOS (mantido com MReplays)
 # =====================
 scan_freefire_files() {
     local pkg="$1"
@@ -66,14 +66,12 @@ scan_freefire_files() {
         if [ -d "$dir" ]; then
             echo "📁 Pasta analisada: $dir"
 
-            # Todos os arquivos modificados (data/hora completa + caminho completo)
-            echo "   📂 Arquivos modificados recentemente:"
+            echo "   📂 Arquivos modificados (data/hora + caminho completo):"
             find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS  %p\n' 2>/dev/null | sort -r | head -n 40 | while read -r line; do
                 echo "      $line"
                 found=1
             done
 
-            # Busca específica por MReplays
             echo "   🎥 MReplays encontrados:"
             find "$dir" -type f -iname "*MReplays*" -o -iname "*mreplay*" 2>/dev/null | while read -r file; do
                 mod_date=$(stat -c "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)
@@ -81,7 +79,6 @@ scan_freefire_files() {
                 found=1
             done
 
-            # Replays gerais
             echo "   🎥 Outros replays / gravações:"
             find "$dir" -type f \( -iname "*replay*" -o -iname "*record*" -o -iname "*highlight*" -o -iname "*.mp4" -o -iname "FFReplay*" \) 2>/dev/null | while read -r file; do
                 mod_date=$(stat -c "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)
@@ -97,7 +94,7 @@ scan_freefire_files() {
 }
 
 # =====================
-# FUNÇÃO PRINCIPAL DE SCAN
+# FUNÇÃO PRINCIPAL DE SCAN (DETECÇÃO MUITO MAIS SENSÍVEL)
 # =====================
 fazer_scan() {
     clear
@@ -113,7 +110,7 @@ fazer_scan() {
     echo "📅 Scan iniciado: $DATE"
     echo "──────────────────────────────"
 
-    # Varredura global
+    # Varredura global (mantida)
     echo ""
     echo "🔎 [VARREDURA GLOBAL - HOOKS / CHEATS]"
     > "$TMP"
@@ -136,7 +133,7 @@ fazer_scan() {
         echo "✅ Nenhum arquivo suspeito global"
     fi
 
-    # Arquivos críticos
+    # Arquivos críticos (mantido)
     echo ""
     echo "☢️ [ARQUIVOS CRÍTICOS]"
     CRITICAL=$(find /data/data/com.dts.freefire* /storage/emulated/0/Android/data/com.dts.freefire* -type f 2>/dev/null | grep -iE "libhook|libcheat|libinject|aimbot|wallhack|esp|libanort" | head -n 10)
@@ -148,9 +145,9 @@ fazer_scan() {
         echo "✅ Nenhum arquivo crítico encontrado"
     fi
 
-    # FONTE DE INSTALAÇÃO VIA LOGS (todas as logs do sistema)
+    # Fonte de instalação via logs (mantido)
     echo ""
-    echo "📦 [FONTE DE INSTALAÇÃO VIA LOGS DO SISTEMA]"
+    echo "📦 [FONTE DE INSTALAÇÃO VIA LOGS]"
     for game in "com.dts.freefireth:Free Fire NORMAL" "com.dts.freefiremax:Free Fire MAX"; do
         pkg="${game%%:*}"
         nome="${game##*:}"
@@ -158,28 +155,29 @@ fazer_scan() {
         echo "🎮 $nome ($pkg)"
         INSTALL_LOGS=$(logcat -d -v time -b all 2>/dev/null | grep -i "$pkg" | grep -iE 'install|installer|package.*added|pm install|app installed' | tail -n 30)
         if [ -n "$INSTALL_LOGS" ]; then
-            echo "   📅 Registros de instalação encontrados:"
+            echo "   📅 Registros de instalação:"
             echo "$INSTALL_LOGS" | while read -r line; do
                 ts=$(echo "$line" | awk '{print $1 " " $2}')
                 relato=$(echo "$line" | cut -d' ' -f3-)
                 echo "      $ts → $relato"
             done
         else
-            echo "   ⚠️  Nenhum registro de instalação encontrado nas logs"
+            echo "   ⚠️  Nenhum registro de instalação encontrado"
         fi
     done
 
     # =====================
-    # DETECÇÃO DE PAREAMENTO / DESPAREAMENTO (TRAZIDO DE VOLTA - O MAIS IMPORTANTE)
+    # DETECÇÃO AMPLIADA DE PAREAMENTO / DESPAREAMENTO / MODIFICAÇÃO ADB
     # =====================
     echo ""
-    echo "🔗 [PAREAMENTO / DESPAREAMENTO ADB / WIFI DEBUG]"
-    echo "Buscando em TODAS as logs do sistema..."
+    echo "🔗 [DETECÇÃO COMPLETA - PAREAMENTO / DESPAREAMENTO / MODIFICAÇÃO ADB/WIFI DEBUG]"
+    echo "Buscando em TODAS as logs do sistema (logcat -b all)..."
 
-    EVENTS=$(logcat -d -v time -b all 2>/dev/null | grep -iE 'pairing|unpair|pareamento|despareamento|forget|remove|AdbDebuggingManager|wifi.*debug|adb.*wireless|WirelessDebug|adb.*pair' | tail -n 100)
+    # Padrão MUITO amplo (inclui qualquer coisa minimamente suspeita)
+    EVENTS=$(logcat -d -v time -b all 2>/dev/null | grep -iE 'pairing|unpair|pareamento|despareamento|forget|remove|AdbDebuggingManager|wifi.*debug|adb.*wireless|WirelessDebug|adb.*pair|adb.*toggle|debug.*enable|debug.*disable|adb.*service|pair.*code|unpair.*device|wifi.*adb' | tail -n 200)
 
     if [ -n "$EVENTS" ]; then
-        echo "🚨 REGISTROS ENCONTRADOS:"
+        echo "🚨 REGISTROS ENCONTRADOS (mesmo minimamente suspeitos):"
         echo "$EVENTS" | while read -r line; do
             ts=$(echo "$line" | awk '{print $1 " " $2}')
             relato=$(echo "$line" | cut -d' ' -f3-)
@@ -189,15 +187,15 @@ fazer_scan() {
             elif echo "$line" | grep -qiE "unpair|despareamento|forget|remove"; then
                 tipo="DESPAREAMENTO"
             else
-                tipo="EVENTO ADB"
+                tipo="MODIFICAÇÃO ADB / WIFI DEBUG"
             fi
             
             echo "   📅 $ts → [$tipo] $relato"
         done
-        score=$((score+25))
+        score=$((score+30))
         wo_recomendado=1
     else
-        echo "✅ Nenhum registro de pareamento/despareamento encontrado"
+        echo "✅ Nenhum registro de pareamento, despareamento ou modificação ADB encontrado nas logs"
     fi
 
     # Arquivos modificados + MReplays
