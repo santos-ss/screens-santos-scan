@@ -19,8 +19,8 @@ echo "────────────────────────�
 # =====================
 FILE_KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
 
-# Filtro ampliado para capturar QUALQUER pareamento/despareamento, inclusive "Esquecer" na Depuração WiFi/USB
-LOG_KEYWORDS="AdbDebuggingManager|wireless.*debug|pairing|pair|unpair|forget|remove|delete|paired|connect|disconnect|bond|bonding|brevent|shizuku|adb.*debug|debugging.*forget|forget.*device|esquecer"
+# Filtro ampliado para capturar "Esquecer", Forget, Brevent, Shizuku, Wireless Debugging, etc.
+LOG_KEYWORDS="AdbDebuggingManager|wireless.*debug|pairing|pair|unpair|forget|remove|delete|paired|connect|disconnect|bond|bonding|brevent|shizuku|adb.*debug|debugging.*forget|forget.*device|esquecer|remove.*device"
 
 # =====================
 # INICIALIZA ARQUIVO DE RESULTADO
@@ -31,7 +31,7 @@ echo "════════════════════════�
 echo "" >> "$RESULT_FILE"
 
 # =====================
-# VARREDURA GLOBAL DE ARQUIVOS (mantida)
+# VARREDURA GLOBAL DE ARQUIVOS
 # =====================
 echo ""
 echo "🔎 [VARREDURA GLOBAL - AGRESSIVA]"
@@ -64,7 +64,7 @@ fi
 echo "" >> "$RESULT_FILE"
 
 # =====================
-# KERNEL + ROOT + PROCESSOS (resumido)
+# KERNEL + ROOT + PROCESSOS
 # =====================
 echo ""
 echo "⚙️ [KERNEL] $(uname -a)" >> "$RESULT_FILE"
@@ -93,15 +93,15 @@ else
 fi
 
 # =====================
-# ANÁLISE DE LOGS - DETECÇÃO AMPLIADA DE PAREAMENTO/DESPAREAMENTO
+# ANÁLISE DE LOGS - TODAS AS LOGS RELEVANTES APARECEM NA TELA
 # =====================
 echo ""
 echo "🔗 [ANÁLISE DE PAREAMENTOS / DESPAREAMENTOS / ESQUECER DISPOSITIVO]"
 
 LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
-EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "$LOG_KEYWORDS" | tail -n 300)
+EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "$LOG_KEYWORDS" | tail -n 400)
 
-echo "📋 Total de eventos de pareamento/despareamento encontrados: $(echo "$EVENTS" | wc -l)" >> "$RESULT_FILE"
+echo "📋 Total de eventos encontrados: $(echo "$EVENTS" | wc -l)" >> "$RESULT_FILE"
 echo "" >> "$RESULT_FILE"
 echo "LOGS DE PAREAMENTO / DESPAREAMENTO / ESQUECER:" >> "$RESULT_FILE"
 echo "────────────────────────────────────" >> "$RESULT_FILE"
@@ -111,9 +111,10 @@ if [ -n "$EVENTS" ]; then
     timestamp=$(echo "$line" | awk '{print $1 " " $2}' 2>/dev/null || echo "$DATE")
     clean_msg=$(echo "$line" | sed 's/.*: //')
 
+    # Mostra TODAS as logs relevantes na tela do Termux
     if echo "$line" | grep -qiE "unpair|forget|remove|delete|esquecer|forget.*device"; then
       echo "   🟥 [DESPARELHADO / ESQUECIDO] $timestamp → $clean_msg"
-      echo "[AVISO] DESPARELHADO / ESQUECIDO (Forget) → $timestamp | $clean_msg" >> "$RESULT_FILE"
+      echo "[AVISO] DESPARELHADO / ESQUECIDO (Forget/Esquecer) → $timestamp | $clean_msg" >> "$RESULT_FILE"
       score=$((score+12))
     elif echo "$line" | grep -qiE "pair|paired|connect|bond"; then
       echo "   🟨 [PAREADO / CONECTADO]     $timestamp → $clean_msg"
@@ -129,8 +130,8 @@ if [ -n "$EVENTS" ]; then
     fi
   done
 else
+  echo "✅ Nenhum evento de pareamento/despareamento encontrado no momento"
   echo "✅ Nenhum evento de pareamento/despareamento encontrado" >> "$RESULT_FILE"
-  echo "✅ Nenhum evento de pareamento/despareamento encontrado"
 fi
 
 echo "" >> "$RESULT_FILE"
