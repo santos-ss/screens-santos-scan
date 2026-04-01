@@ -6,7 +6,7 @@ echo "╚═══════════════════════�
 
 TMP="/sdcard/scan_tmp.txt"
 SCAN_FILE="/sdcard/hookingSCAN.txt"
-RESULT_FILE="/sdcard/hooking_result.txt"   # ← Arquivo principal solicitado
+RESULT_FILE="/sdcard/hooking_result.txt"
 DATE=$(date +"%Y-%m-%d %H:%M:%S")
 
 score=0
@@ -56,29 +56,28 @@ done
 
 sort -u "\( TMP" > " \){TMP}_clean"
 
-# Salva no hooking_result.txt
+# Salva arquivos suspeitos no resultado
 echo "🔍 ARQUIVOS SUSPEITOS ENCONTRADOS:" >> "$RESULT_FILE"
 echo "────────────────────────────────────" >> "$RESULT_FILE"
 if [ -s "${TMP}_clean" ]; then
   cat "${TMP}_clean" >> "$RESULT_FILE"
   echo "" >> "$RESULT_FILE"
   echo "Total de arquivos suspeitos: \( (wc -l < " \){TMP}_clean")" >> "$RESULT_FILE"
+  score=$((score+8))
 else
   echo "Nenhum arquivo suspeito encontrado." >> "$RESULT_FILE"
 fi
 echo "" >> "$RESULT_FILE"
 
 if [ -s "${TMP}_clean" ]; then
-  echo ""
   echo "🚨 DETECÇÕES DE ARQUIVOS:"
   cat "${TMP}_clean"
-  score=$((score+8))
 else
   echo "✅ Nenhum arquivo suspeito encontrado"
 fi
 
 # =====================
-# KERNEL
+# KERNEL + ROOT + PROCESSOS (mantido)
 # =====================
 echo ""
 echo "⚙️ [KERNEL]"
@@ -93,9 +92,6 @@ else
   echo "✅ Kernel padrão" >> "$RESULT_FILE"
 fi
 
-# =====================
-# ROOT + PROCESSOS
-# =====================
 echo ""
 echo "🔐 [ROOT]"
 if su -c id >/dev/null 2>&1; then
@@ -115,7 +111,7 @@ else
 fi
 
 # =====================
-# ANÁLISE COMPLETA DE TODAS AS LOGS DO SISTEMA
+# ANÁLISE COMPLETA DE LOGS + AVISO DE PAREAMENTO/DESPAREAMENTO
 # =====================
 echo ""
 echo "🔗 [ANÁLISE COMPLETA DE TODAS AS LOGS DO SISTEMA]"
@@ -133,18 +129,19 @@ if [ -n "$EVENTS" ]; then
     timestamp=$(echo "$line" | awk '{print $1 " " $2}' 2>/dev/null || echo "$DATE")
     clean_msg=$(echo "$line" | sed 's/.*: //')
 
+    # ==================== AVISO CLARO DE PAREAMENTO/DESPAREAMENTO ====================
     if echo "$line" | grep -qiE "unpair|forget|remove|delete|disconnect"; then
-      echo "   🟥 [DESPARELHADO/DESCONECTADO] $timestamp → $clean_msg"
+      echo "   🟥 [DESPARELHADO / DESCONECTADO] $timestamp → $clean_msg"
+      echo "[AVISO] DESPARELHADO/DESCONECTADO → $timestamp | $clean_msg" >> "$RESULT_FILE"
       score=$((score+12))
     elif echo "$line" | grep -qiE "pair|bond|connect|paired"; then
-      echo "   🟨 [PAREADO/CONECTADO]     $timestamp → $clean_msg"
+      echo "   🟨 [PAREADO / CONECTADO]     $timestamp → $clean_msg"
+      echo "[AVISO] PAREADO/CONECTADO     → $timestamp | $clean_msg" >> "$RESULT_FILE"
       score=$((score+7))
     else
-      echo "   🔵 [EVENTO SUSPEITO]      $timestamp → $clean_msg"
+      echo "   🔵 [EVENTO SUSPEITO]         $timestamp → $clean_msg"
+      echo "[EVENTO SUSPEITO]             → $timestamp | $clean_msg" >> "$RESULT_FILE"
     fi
-
-    # Salva TODA linha suspeita no arquivo principal
-    echo "[$DATE] $line" >> "$RESULT_FILE"
   done
 else
   echo "✅ Nenhuma atividade suspeita encontrada em TODAS as logs do sistema" >> "$RESULT_FILE"
@@ -172,7 +169,7 @@ fi
 echo "Score : $score"
 echo "Status: $status"
 echo ""
-echo "📄 Relatório completo salvo em: $RESULT_FILE"
+echo "📄 Relatório completo com avisos salvo em: $RESULT_FILE"
 
 echo ""
 echo "╔════════════════════════════════════╗"
