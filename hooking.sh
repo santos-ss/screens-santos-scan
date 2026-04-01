@@ -1,166 +1,79 @@
-#!/bin/bash
-
-echo "╔════════════════════════════════════╗"
-echo "║         🔍 H O O K I N G           ║"
-echo "╚════════════════════════════════════╝"
-
-LOG="/sdcard/scan_log.txt"
-TMP="/sdcard/scan_tmp.txt"
-SCAN_FILE="/sdcard/hookingSCAN.txt"   # ← Novo arquivo solicitado
-DATE=$(date +"%Y-%m-%d %H:%M:%S")
-
-score=0
-
-echo ""
-echo "📅 $DATE"
-echo "──────────────────────────────"
-
-# =====================
-# KEYWORDS
-# =====================
-KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
-
-# =====================
-# VARREDURA GLOBAL
-# =====================
-echo ""
-echo "🔎 [VARREDURA GLOBAL - AGRESSIVA]"
-
-> "$TMP"
-
-PATHS="
-/storage/emulated/0
-/storage/self/primary
-/sdcard
-/data/local/tmp
-/data/data
-/data/app
-/data/user
-/data/misc/adb
-"
-
-for path in $PATHS; do
-  if [ -d "$path" ]; then
-    echo "[*] Escaneando: $path"
-    find "$path" -type f 2>/dev/null | grep -iE "$KEYWORDS" >> "$TMP"
-  fi
-done
-
-sort -u "\( TMP" > " \){TMP}_clean"
-
-# =====================
-# CRIAÇÃO DO ARQUIVO hookingSCAN.txt
-# =====================
-echo "🔍 Salvando lista de arquivos suspeitos em: $SCAN_FILE"
-echo "=== H O O K I N G  SCAN  -  $DATE ===" > "$SCAN_FILE"
-echo "Total de arquivos suspeitos encontrados: \( (wc -l < " \){TMP}_clean")" >> "$SCAN_FILE"
-echo "────────────────────────────────────" >> "$SCAN_FILE"
-cat "${TMP}_clean" >> "$SCAN_FILE"
-echo "" >> "$SCAN_FILE"
-echo "=== FIM DO SCAN ===" >> "$SCAN_FILE"
-
-if [ -s "${TMP}_clean" ]; then
-  echo ""
-  echo "🚨 DETECÇÕES ENCONTRADAS:"
-  cat "${TMP}_clean"
-  score=$((score+8))
-else
-  echo "✅ Nenhum arquivo suspeito encontrado"
-fi
-
-# =====================
-# KERNEL
-# =====================
-echo ""
-echo "⚙️ [KERNEL]"
-KERNEL=$(uname -a)
-echo "$KERNEL"
-if echo "$KERNEL" | grep -iqE "custom|perf|gaming|overclock|kernelsu"; then
-  echo "⚠️ Kernel possivelmente modificada"
-  score=$((score+4))
-else
-  echo "✅ Kernel padrão"
-fi
-
-# =====================
-# ROOT + PROCESSOS + ADB (mantido resumido)
-# =====================
-echo ""
-echo "🔐 [ROOT]"
-if su -c id >/dev/null 2>&1; then
-  echo "❌ ROOT ATIVO"
-  score=$((score+10))
-else
-  echo "✅ Sem root ativo"
-fi
-
-echo ""
-echo "🧠 [PROCESSOS]"
-if ps -ef 2>/dev/null | grep -E "frida-server|xposed|zygisk|magisk|shizuku|brevent" >/dev/null; then
-  echo "🚨 Processo suspeito em execução"
-  score=$((score+8))
-else
-  echo "✅ Processos limpos"
-fi
-
-# =====================
-# WIFI DEBUG
-# =====================
-echo ""
-echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
-# (mantido igual ao anterior - se quiser posso deixar mais curto)
-
-pairing_flags=0
-LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
-EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove|paired|brevent|shizuku" | tail -n 25)
-
-echo "📋 Eventos detectados:"
-if [ -n "$EVENTS" ]; then
-  echo "$EVENTS" | while read -r line; do
-    timestamp=$(echo "$line" | awk '{print $1 " " $2}')
-    clean_msg=$(echo "$line" | sed 's/.*: //')
-    if echo "$line" | grep -qiE "unpair|forget|remove|delete"; then
-      echo "   🟥 [DESPARELHADO] $timestamp → $clean_msg"
-      score=$((score+12))
-    elif echo "$line" | grep -qiE "pair|connect"; then
-      echo "   🟨 [PAREADO]     $timestamp → $clean_msg"
-      score=$((score+7))
-    fi
-  done
-else
-  echo "✅ Nenhum evento de pairing/desparelhamento encontrado"
-fi
-
-# =====================
-# RESULTADO FINAL
-# =====================
-echo ""
-echo "════════ RESULTADO ════════"
-
-if [ $score -ge 25 ]; then
-  status="💀 CRITICO"
-elif [ $score -ge 15 ]; then
-  status="🚨 SUSPEITO"
-elif [ $score -ge 8 ]; then
-  status="⚠️ ATENÇÃO"
-else
-  status="✅ LIMPO"
-fi
-
-echo "Score : $score"
-echo "Status: $status"
-echo ""
-echo "📄 Lista completa de suspeitos salva em: $SCAN_FILE"
-
-echo ""
-echo "╔════════════════════════════════════╗"
-echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
-echo "╚════════════════════════════════════╝"
-
-echo ""
-echo "Pressione ENTER para limpar o terminal..."
-read -r
+cat > \~/scanner_remote.sh << 'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+# =============================================
+# SCANNER DE BYPASS REMOTE (FRP / Conta Google)
+# Feito para Termux - Detecta root + ADB + USB
+# =============================================
 
 clear
-reset
-echo "Terminal limpo e resetado."
+echo "🔍 SCANNER BYPASS REMOTE - Iniciando..."
+echo "==========================================="
+
+# 1. Root detection
+echo -n "📌 Verificando ROOT... "
+if command -v su >/dev/null 2>&1 && su -c 'id' 2>/dev/null | grep -q "uid=0"; then
+    echo "✅ DETECTADO (root funcional)"
+    ROOT=1
+else
+    echo "❌ Não encontrado"
+    ROOT=0
+fi
+
+# 2. ADB / Depuração USB
+ADB_ENABLED=$(settings get global adb_enabled 2>/dev/null || echo "0")
+echo -n "📌 Depuração USB (ADB) ativada... "
+[ "$ADB_ENABLED" = "1" ] && echo "✅ SIM" || echo "❌ NÃO"
+
+# 3. Serviço adbd
+ADBD_STATUS=$(getprop init.svc.adbd 2>/dev/null || echo "parado")
+echo -n "📌 Serviço adbd rodando... "
+[ "$ADBD_STATUS" = "running" ] && echo "✅ SIM" || echo "❌ $ADBD_STATUS"
+
+# 4. ADB Wireless (muito usado no REMOTE)
+TCP_PORT=$(getprop service.adb.tcp.port 2>/dev/null || echo "0")
+echo -n "📌 ADB Wireless (REMOTE) ativo... "
+if [ "$TCP_PORT" != "0" ] && [ -n "$TCP_PORT" ]; then
+    echo "✅ SIM (porta $TCP_PORT)"
+else
+    echo "❌ Não"
+fi
+
+# 5. Opções de Desenvolvedor
+DEV=$(settings get global development_settings_enabled 2>/dev/null || echo "0")
+echo -n "📌 Opções de Desenvolvedor... "
+[ "$DEV" = "1" ] && echo "✅ Ativadas" || echo "❌ Desativadas"
+
+# 6. Magisk / Root avançado (comum no "root muito bom")
+echo -n "📌 Magisk / Root avançado... "
+if [ -d /data/adb/magisk ] || ls /data/adb/*magisk* >/dev/null 2>&1 || [ -f /data/adb/magisk.db ]; then
+    echo "✅ Detectado"
+else
+    echo "❌ Não encontrado"
+fi
+
+# 7. Processos ADB ativos
+echo -e "\n📌 Processos ADB em execução:"
+ps -ef | grep -E 'adbd|adb' | grep -v grep || echo "   Nenhum processo ADB encontrado"
+
+echo -e "\n==========================================="
+echo "📋 RELATÓRIO FINAL"
+
+if [ "$ROOT" = "1" ] || [ "$ADB_ENABLED" = "1" ] || [ "$ADBD_STATUS" = "running" ] || [ "$TCP_PORT" != "0" ]; then
+    echo "🚨 ALERTA: Possível Bypass REMOTE detectado!"
+    echo "   O método REMOTE normalmente usa:"
+    echo "   • Root avançado + ADB/USB ou"
+    echo "   • ADB Wireless (porta TCP)"
+    echo "   Dispositivo parece vulnerável ou já foi usado com o bypass."
+else
+    echo "✅ Nenhum sinal claro do Bypass REMOTE encontrado."
+fi
+
+echo "==========================================="
+echo "Script feito por Grok para você 🔥"
+EOF
+
+# Torna executável
+chmod +x \~/scanner_remote.sh
+echo "✅ Script criado com sucesso!"
+echo "🚀 Para rodar agora: ./scanner_remote.sh"
+echo "   Ou depois: cd \~ && ./scanner_remote.sh"
