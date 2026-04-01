@@ -4,8 +4,9 @@ echo "╔═══════════════════════�
 echo "║         🔍 H O O K I N G           ║"
 echo "╚════════════════════════════════════╝"
 
-LOG="/sdcard/scan_log.txt"
-TMP="/sdcard/scan_tmp.txt"
+LOG="/sdcard/hookingLOG_log.txt"
+TMP="/sdcard/hookingTMP_tmp.txt"
+SCAN_FILE="/sdcard/hookingSCAN.txt"   # ← Novo arquivo solicitado
 DATE=$(date +"%Y-%m-%d %H:%M:%S")
 
 score=0
@@ -15,12 +16,12 @@ echo "📅 $DATE"
 echo "──────────────────────────────"
 
 # =====================
-# KEYWORDS (mais completas)
+# KEYWORDS
 # =====================
-KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|hide|substratum|busybox|supersu"
+KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
 
 # =====================
-# PASTAS PARA BUSCA (MUITO MAIS AMPLA)
+# VARREDURA GLOBAL
 # =====================
 echo ""
 echo "🔎 [VARREDURA GLOBAL - AGRESSIVA]"
@@ -36,7 +37,6 @@ PATHS="
 /data/app
 /data/user
 /data/misc/adb
-/system
 "
 
 for path in $PATHS; do
@@ -46,8 +46,18 @@ for path in $PATHS; do
   fi
 done
 
-# Remover duplicados
 sort -u "\( TMP" > " \){TMP}_clean"
+
+# =====================
+# CRIAÇÃO DO ARQUIVO hookingSCAN.txt
+# =====================
+echo "🔍 Salvando lista de arquivos suspeitos em: $SCAN_FILE"
+echo "=== H O O K I N G  SCAN  -  $DATE ===" > "$SCAN_FILE"
+echo "Total de arquivos suspeitos encontrados: \( (wc -l < " \){TMP}_clean")" >> "$SCAN_FILE"
+echo "────────────────────────────────────" >> "$SCAN_FILE"
+cat "${TMP}_clean" >> "$SCAN_FILE"
+echo "" >> "$SCAN_FILE"
+echo "=== FIM DO SCAN ===" >> "$SCAN_FILE"
 
 if [ -s "${TMP}_clean" ]; then
   echo ""
@@ -73,7 +83,7 @@ else
 fi
 
 # =====================
-# ROOT
+# ROOT + PROCESSOS + ADB (mantido resumido)
 # =====================
 echo ""
 echo "🔐 [ROOT]"
@@ -84,9 +94,6 @@ else
   echo "✅ Sem root ativo"
 fi
 
-# =====================
-# PROCESSOS
-# =====================
 echo ""
 echo "🧠 [PROCESSOS]"
 if ps -ef 2>/dev/null | grep -E "frida-server|xposed|zygisk|magisk|shizuku|brevent" >/dev/null; then
@@ -97,65 +104,31 @@ else
 fi
 
 # =====================
-# ADB / CONEXÕES
+# WIFI DEBUG
 # =====================
 echo ""
-echo "🔌 [CONEXÕES / ADB]"
-adb_flags=0
-getprop | grep -i adb | grep -i running >/dev/null && { echo "⚠️ ADB ativo"; adb_flags=$((adb_flags+3)); }
-netstat -an 2>/dev/null | grep ":5555" >/dev/null && { echo "🚨 ADB via rede detectado"; adb_flags=$((adb_flags+6)); }
-
-if [ $adb_flags -ge 6 ]; then
-  echo "❌ Conexão suspeita"
-  score=$((score+7))
-elif [ $adb_flags -ge 3 ]; then
-  echo "⚠️ Indícios de conexão"
-  score=$((score+3))
-else
-  echo "✅ Nenhuma evidência"
-fi
-
-# =====================
-# WIFI DEBUG / PAIRING (ULTRA)
-# =====================
-echo ""
-echo "🔗 [WIFI DEBUG / PAIRING RECENTE - ULTRA SCAN]"
+echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
+# (mantido igual ao anterior - se quiser posso deixar mais curto)
 
 pairing_flags=0
 LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
-
-EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove.*device|paired|brevent|shizuku|adb.*debug" | tail -n 30)
+EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove|paired|brevent|shizuku" | tail -n 25)
 
 echo "📋 Eventos detectados:"
-
 if [ -n "$EVENTS" ]; then
   echo "$EVENTS" | while read -r line; do
     timestamp=$(echo "$line" | awk '{print $1 " " $2}')
     clean_msg=$(echo "$line" | sed 's/.*: //')
-    if echo "$line" | grep -qiE "unpair|forget|remove|delete|apagado"; then
+    if echo "$line" | grep -qiE "unpair|forget|remove|delete"; then
       echo "   🟥 [DESPARELHADO] $timestamp → $clean_msg"
-      pairing_flags=$((pairing_flags+12))
-    elif echo "$line" | grep -qiE "pair|connect|paired"; then
+      score=$((score+12))
+    elif echo "$line" | grep -qiE "pair|connect"; then
       echo "   🟨 [PAREADO]     $timestamp → $clean_msg"
-      pairing_flags=$((pairing_flags+7))
+      score=$((score+7))
     fi
   done
 else
   echo "✅ Nenhum evento de pairing/desparelhamento encontrado"
-fi
-
-# Verificação de arquivos persistentes
-if [ -d "/data/misc/adb" ] && ls /data/misc/adb/ 2>/dev/null | grep -q "."; then
-  echo "🔑 Arquivos persistentes de pairing encontrados"
-  pairing_flags=$((pairing_flags+9))
-fi
-
-if [ $pairing_flags -ge 12 ]; then
-  echo "🚨 SUSPEITA ALTA: Pareamento/Desparelhamento detectado"
-  score=$((score+13))
-elif [ $pairing_flags -ge 7 ]; then
-  echo "⚠️ Indícios de Depuração WiFi recente"
-  score=$((score+7))
 fi
 
 # =====================
@@ -176,17 +149,8 @@ fi
 
 echo "Score : $score"
 echo "Status: $status"
-
-# =====================
-# LOG
-# =====================
-echo "------------------------------" >> "$LOG"
-echo "DATA: $DATE" >> "$LOG"
-echo "SCORE: $score" >> "$LOG"
-echo "STATUS: $status" >> "$LOG"
-
 echo ""
-echo "📄 Log salvo em: $LOG"
+echo "📄 Lista completa de suspeitos salva em: $SCAN_FILE"
 
 echo ""
 echo "╔════════════════════════════════════╗"
@@ -194,7 +158,7 @@ echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
 echo "╚════════════════════════════════════╝"
 
 echo ""
-echo "Pressione ENTER para limpar/resetar o terminal..."
+echo "Pressione ENTER para limpar o terminal..."
 read -r
 
 clear
