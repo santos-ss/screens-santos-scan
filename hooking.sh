@@ -5,7 +5,6 @@ echo "║         🔍 H O O K I N G           ║"
 echo "╚════════════════════════════════════╝"
 
 TMP="/sdcard/scan_tmp.txt"
-SCAN_FILE="/sdcard/hookingSCAN.txt"
 RESULT_FILE="/sdcard/hooking_result.txt"
 DATE=$(date +"%Y-%m-%d %H:%M:%S")
 
@@ -16,12 +15,14 @@ echo "📅 $DATE"
 echo "──────────────────────────────"
 
 # =====================
-# KEYWORDS
+# KEYWORDS PRINCIPAIS
 # =====================
-KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu|AdbDebuggingManager|wireless|pairing|pair|unpair|forget|remove|paired|bond|bonding|bluetooth|wifi|connect|disconnect|connection|debug|shizuku|brevent"
+FILE_KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
+
+LOG_KEYWORDS="AdbDebuggingManager|pairing|pair|unpair|forget|remove|paired|connect|disconnect|brevent|shizuku|wireless.*debug|adb.*wifi"
 
 # =====================
-# LIMPA ARQUIVO DE RESULTADO
+# INICIALIZA ARQUIVO DE RESULTADO
 # =====================
 echo "=== H O O K I N G   R E S U L T   -   $DATE ===" > "$RESULT_FILE"
 echo "Data do scan: $DATE" >> "$RESULT_FILE"
@@ -36,60 +37,40 @@ echo "🔎 [VARREDURA GLOBAL - AGRESSIVA]"
 
 > "$TMP"
 
-PATHS="
-/storage/emulated/0
-/storage/self/primary
-/sdcard
-/data/local/tmp
-/data/data
-/data/app
-/data/user
-/data/misc/adb
-"
+PATHS="/storage/emulated/0 /sdcard /data/local/tmp /data/data /data/app /data/user /data/misc/adb"
 
 for path in $PATHS; do
   if [ -d "$path" ]; then
     echo "[*] Escaneando: $path"
-    find "$path" -type f 2>/dev/null | grep -iE "$KEYWORDS" >> "$TMP"
+    find "$path" -type f 2>/dev/null | grep -iE "$FILE_KEYWORDS" >> "$TMP"
   fi
 done
 
 sort -u "\( TMP" > " \){TMP}_clean"
 
-# Salva arquivos suspeitos no resultado
 echo "🔍 ARQUIVOS SUSPEITOS ENCONTRADOS:" >> "$RESULT_FILE"
 echo "────────────────────────────────────" >> "$RESULT_FILE"
 if [ -s "${TMP}_clean" ]; then
   cat "${TMP}_clean" >> "$RESULT_FILE"
-  echo "" >> "$RESULT_FILE"
-  echo "Total de arquivos suspeitos: \( (wc -l < " \){TMP}_clean")" >> "$RESULT_FILE"
+  echo "Total: \( (wc -l < " \){TMP}_clean")" >> "$RESULT_FILE"
   score=$((score+8))
-else
-  echo "Nenhum arquivo suspeito encontrado." >> "$RESULT_FILE"
-fi
-echo "" >> "$RESULT_FILE"
-
-if [ -s "${TMP}_clean" ]; then
-  echo "🚨 DETECÇÕES DE ARQUIVOS:"
+  echo "🚨 DETECÇÕES DE ARQUIVOS:" 
   cat "${TMP}_clean"
 else
+  echo "Nenhum arquivo suspeito encontrado." >> "$RESULT_FILE"
   echo "✅ Nenhum arquivo suspeito encontrado"
 fi
-
-# =====================
-# KERNEL + ROOT + PROCESSOS (mantido)
-# =====================
-echo ""
-echo "⚙️ [KERNEL]"
-KERNEL=$(uname -a)
-echo "$KERNEL" >> "$RESULT_FILE"
 echo "" >> "$RESULT_FILE"
 
-if echo "$KERNEL" | grep -iqE "custom|perf|gaming|overclock|kernelsu"; then
+# =====================
+# KERNEL + ROOT + PROCESSOS
+# =====================
+echo ""
+echo "⚙️ [KERNEL] $(uname -a)" >> "$RESULT_FILE"
+
+if uname -a | grep -iqE "custom|perf|gaming|overclock|kernelsu"; then
   echo "⚠️ Kernel possivelmente modificada" >> "$RESULT_FILE"
   score=$((score+4))
-else
-  echo "✅ Kernel padrão" >> "$RESULT_FILE"
 fi
 
 echo ""
@@ -111,17 +92,17 @@ else
 fi
 
 # =====================
-# ANÁLISE COMPLETA DE LOGS + AVISO DE PAREAMENTO/DESPAREAMENTO
+# ANÁLISE DE LOGS - FILTRO MELHORADO PARA PAREAMENTOS
 # =====================
 echo ""
-echo "🔗 [ANÁLISE COMPLETA DE TODAS AS LOGS DO SISTEMA]"
+echo "🔗 [ANÁLISE DE PAREAMENTOS / DESPAREAMENTOS / BREVENT]"
 
 LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
-EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "$KEYWORDS" | tail -n 300)
+EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "$LOG_KEYWORDS" | tail -n 250)
 
-echo "📋 Total de eventos suspeitos nas logs do sistema: $(echo "$LOGCAT_FULL" | grep -iE "$KEYWORDS" | wc -l)" >> "$RESULT_FILE"
+echo "📋 Eventos de pareamento/despareamento encontrados: $(echo "$EVENTS" | wc -l)" >> "$RESULT_FILE"
 echo "" >> "$RESULT_FILE"
-echo "LOGS DO SISTEMA (EVENTOS SUSPEITOS):" >> "$RESULT_FILE"
+echo "LOGS DE PAREAMENTO / DESPAREAMENTO:" >> "$RESULT_FILE"
 echo "────────────────────────────────────" >> "$RESULT_FILE"
 
 if [ -n "$EVENTS" ]; then
@@ -129,22 +110,26 @@ if [ -n "$EVENTS" ]; then
     timestamp=$(echo "$line" | awk '{print $1 " " $2}' 2>/dev/null || echo "$DATE")
     clean_msg=$(echo "$line" | sed 's/.*: //')
 
-    # ==================== AVISO CLARO DE PAREAMENTO/DESPAREAMENTO ====================
     if echo "$line" | grep -qiE "unpair|forget|remove|delete|disconnect"; then
       echo "   🟥 [DESPARELHADO / DESCONECTADO] $timestamp → $clean_msg"
       echo "[AVISO] DESPARELHADO/DESCONECTADO → $timestamp | $clean_msg" >> "$RESULT_FILE"
       score=$((score+12))
-    elif echo "$line" | grep -qiE "pair|bond|connect|paired"; then
+    elif echo "$line" | grep -qiE "pair|paired|connect|bond"; then
       echo "   🟨 [PAREADO / CONECTADO]     $timestamp → $clean_msg"
       echo "[AVISO] PAREADO/CONECTADO     → $timestamp | $clean_msg" >> "$RESULT_FILE"
       score=$((score+7))
+    elif echo "$line" | grep -qiE "brevent|shizuku"; then
+      echo "   ⚠️  [BREVENT / SHIZUKU DETECTADO] $timestamp → $clean_msg"
+      echo "[AVISO] BREVENT/SHIZUKU       → $timestamp | $clean_msg" >> "$RESULT_FILE"
+      score=$((score+10))
     else
-      echo "   🔵 [EVENTO SUSPEITO]         $timestamp → $clean_msg"
-      echo "[EVENTO SUSPEITO]             → $timestamp | $clean_msg" >> "$RESULT_FILE"
+      echo "   🔵 [EVENTO DE CONEXÃO]       $timestamp → $clean_msg"
+      echo "[EVENTO]                      → $timestamp | $clean_msg" >> "$RESULT_FILE"
     fi
   done
 else
-  echo "✅ Nenhuma atividade suspeita encontrada em TODAS as logs do sistema" >> "$RESULT_FILE"
+  echo "✅ Nenhum evento de pareamento/despareamento recente encontrado" >> "$RESULT_FILE"
+  echo "✅ Nenhum evento de pareamento/despareamento recente encontrado"
 fi
 
 echo "" >> "$RESULT_FILE"
@@ -169,7 +154,7 @@ fi
 echo "Score : $score"
 echo "Status: $status"
 echo ""
-echo "📄 Relatório completo com avisos salvo em: $RESULT_FILE"
+echo "📄 Relatório completo salvo em: $RESULT_FILE"
 
 echo ""
 echo "╔════════════════════════════════════╗"
