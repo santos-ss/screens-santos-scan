@@ -1,18 +1,18 @@
 #!/bin/bash
 
 # =====================
-# CORES (AGORA FUNCIONANDO)
+# CORES PARA TERMUX
 # =====================
-RED="\e[91m"
-YELLOW="\e[93m"
-GREEN="\e[92m"
-WHITE="\e[97m"
-RESET="\e[0m"
+RED='\e[91m'
+YELLOW='\e[93m'
+GREEN='\e[92m'
+WHITE='\e[97m'
+RESET='\e[0m'
 
 clear
 
 echo -e "${WHITE}╔════════════════════════════════════╗"
-echo -e "║      \( {YELLOW} 🔍 H O O K I N G \){WHITE}           ║"
+echo -e "║      \( {YELLOW}🔍 H O O K I N G \){WHITE}           ║"
 echo -e "╚════════════════════════════════════╝${RESET}"
 
 LOG="/sdcard/scan_log.txt"
@@ -29,7 +29,7 @@ echo -e "───────────────────────�
 echo -e "\n\( {YELLOW}[🔎 VARREDURA GLOBAL] \){RESET}"
 
 > "$TMP"
-for path in /storage/emulated/0 /storage/self/primary /data/local/tmp /data/data; do
+for path in /storage/emulated/0 /storage/self/primary /data/local/tmp; do
   find "$path" -type f 2>/dev/null | grep -iE "magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed" >> "$TMP"
 done
 
@@ -79,12 +79,12 @@ else
 fi
 
 # =====================
-# WIFI DEBUG / PAIRING
+# WIFI DEBUG
 # =====================
-echo -e "\n\( {YELLOW}[🔗 WIFI DEBUG / PAIRING RECENTE - ULTRA SCAN] \){RESET}"
+echo -e "\n\( {YELLOW}[🔗 WIFI DEBUG / PAIRING RECENTE] \){RESET}"
 
 LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
-EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove|paired|brevent|shizuku" | tail -n 25)
+EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove|paired|brevent|shizuku" | tail -n 20)
 
 echo -e "\( {WHITE}📋 Eventos detectados: \){RESET}"
 
