@@ -14,7 +14,7 @@ Scanner forense Android para análise de:
 pkg update && pkg upgrade -y
 pkg install git -y
 
-git clone https://github.com/santos-ss/screes-santos-scan.git
+git clone https://github.com/santos-ss/screens-santos-scan.git
 cd screes-santos-scan
 
 chmod +x scan.sh
