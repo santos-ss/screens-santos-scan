@@ -2,8 +2,8 @@ echo "╔═══════════════════════�
 echo "║         🔍 H O O K I N G           ║"
 echo "╚════════════════════════════════════╝"
 
-LOG="/sdcard/hookingscan_log.txt"
-TMP="/sdcard/hookingscan_tmp.txt"
+LOG="/sdcard/scan_log.txt"
+TMP="/sdcard/scan_tmp.txt"
 DATE=$(date)
 
 score=0
@@ -15,7 +15,7 @@ echo "────────────────────────�
 # =====================
 # 🔍 KEYWORDS
 # =====================
-KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|kernel|inject|cheat|shizuku|painel|trickstore"
+KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|kernel|inject|cheat"
 
 # =====================
 # 📂 CAMINHOS
