@@ -1,6 +1,5 @@
-#!/data/data/com.termux/files/usr/bin/bash
 echo "╔══════════════════════════════╗"
-echo "║   🔍 ScreeS | Santos Scan    ║"
+echo "║   H   O    O    K    I    N   G   ║"
 echo "╚══════════════════════════════╝"
 
 LOG="/sdcard/scan_log.txt"
@@ -40,7 +39,7 @@ for path in $PATHS; do
 done
 
 # remover duplicados
-sort -u "$TMP" > "${TMP}_clean"
+sort -u "\( TMP" > " \){TMP}_clean"
 
 if [ -s "${TMP}_clean" ]; then
   echo ""
@@ -130,6 +129,36 @@ else
 fi
 
 # =====================
+# 🔗 WIFI DEBUG / PAIRING (NOVA SEÇÃO)
+# =====================
+echo ""
+echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
+
+pairing_flags=0
+
+# Detecta pareamento recente
+if logcat -d 2>/dev/null | grep -iE "AdbDebuggingManager|pairing|pair.*device|wireless.*debug|pair.*code" >/dev/null 2>&1; then
+  echo "⚠️ Dispositivo pareado recentemente (logs detectados)"
+  pairing_flags=$((pairing_flags+4))
+fi
+
+# Detecta remoção/apagamento do dispositivo pareado
+if logcat -d 2>/dev/null | grep -iE "remove|forget|unpair|delete.*paired|paired.*device|removendo|apagado|forgetting" | grep -iE "adb|wireless|debug" >/dev/null 2>&1; then
+  echo "🚨 Dispositivo pareado FOI APAGADO na depuração WiFi (evidência limpa)"
+  pairing_flags=$((pairing_flags+5))
+fi
+
+if [ $pairing_flags -ge 8 ]; then
+  echo "❌ SUSPEITA FORTE: pareou + apagou (típico de bypass/cheat)"
+  score=$((score+8))
+elif [ $pairing_flags -ge 4 ]; then
+  echo "⚠️ Indícios de pairing recente"
+  score=$((score+3))
+else
+  echo "✅ Nenhum pairing ou remoção WiFi detectada"
+fi
+
+# =====================
 # 📊 RESULTADO FINAL
 # =====================
 echo ""
@@ -161,5 +190,5 @@ echo "📄 Log salvo em: $LOG"
 
 echo ""
 echo "╔══════════════════════════════╗"
-echo "║   ✔ SCAN FINALIZADO (ScreeS) ║"
+echo "║ ✔ SCAN FINALIZADO  H O O K I N G  ║"
 echo "╚══════════════════════════════╝"
