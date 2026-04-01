@@ -12,7 +12,7 @@ RESET="\e[0m"
 clear
 
 echo -e "${WHITE}╔════════════════════════════════════╗"
-echo -e "║      \( {YELLOW}🔍 H O O K I N G \){WHITE}           ║"
+echo -e "║      \( {YELLOW} 🔍 H O O K I N G \){WHITE}           ║"
 echo -e "╚════════════════════════════════════╝${RESET}"
 
 LOG="/sdcard/scan_log.txt"
