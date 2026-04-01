@@ -1,6 +1,6 @@
-echo "╔══════════════════════════════╗"
-echo "║   H   O    O    K    I    N   G   ║"
-echo "╚══════════════════════════════╝"
+echo "╔════════════════════════════════════╗"
+echo "║         🔍 H O O K I N G           ║"
+echo "╚════════════════════════════════════╝"
 
 LOG="/sdcard/scan_log.txt"
 TMP="/sdcard/scan_tmp.txt"
@@ -129,33 +129,38 @@ else
 fi
 
 # =====================
-# 🔗 WIFI DEBUG / PAIRING (NOVA SEÇÃO)
+# 🔗 WIFI DEBUG / PAIRING RECENTE (VERSÃO MELHORADA)
 # =====================
 echo ""
 echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
 
 pairing_flags=0
+LOGCAT=$(logcat -d 2>/dev/null)
 
-# Detecta pareamento recente
-if logcat -d 2>/dev/null | grep -iE "AdbDebuggingManager|pairing|pair.*device|wireless.*debug|pair.*code" >/dev/null 2>&1; then
-  echo "⚠️ Dispositivo pareado recentemente (logs detectados)"
+# 1. Pareamento recente
+if echo "$LOGCAT" | grep -iE "AdbDebuggingManager|pairing|pair.*device|wireless.*debug|pair.*code|Received public key" >/dev/null 2>&1; then
+  echo "⚠️ Pareamento WiFi detectado nos logs recentes"
   pairing_flags=$((pairing_flags+4))
 fi
 
-# Detecta remoção/apagamento do dispositivo pareado
-if logcat -d 2>/dev/null | grep -iE "remove|forget|unpair|delete.*paired|paired.*device|removendo|apagado|forgetting" | grep -iE "adb|wireless|debug" >/dev/null 2>&1; then
-  echo "🚨 Dispositivo pareado FOI APAGADO na depuração WiFi (evidência limpa)"
-  pairing_flags=$((pairing_flags+5))
+# 2. Remoção / Desparelhamento
+if echo "$LOGCAT" | grep -iE "AdbDebuggingManager|unpair|forget|remove|delete|removendo|apagado|paired.*device|device.*removed|device.*forget" >/dev/null 2>&1; then
+  echo "🚨 Dispositivo pareado FOI DESPARElhADO / APAGADO na Depuração WiFi"
+  pairing_flags=$((pairing_flags+6))
+  
+  echo "   → Últimas linhas relevantes:"
+  echo "$LOGCAT" | grep -iE "AdbDebuggingManager|unpair|forget|remove|paired|device" | tail -n 10
 fi
 
-if [ $pairing_flags -ge 8 ]; then
-  echo "❌ SUSPEITA FORTE: pareou + apagou (típico de bypass/cheat)"
-  score=$((score+8))
+# Avaliação final da seção
+if [ $pairing_flags -ge 9 ]; then
+  echo "❌ SUSPEITA ALTA: Pareou + removeu/apagou evidência"
+  score=$((score+9))
 elif [ $pairing_flags -ge 4 ]; then
-  echo "⚠️ Indícios de pairing recente"
-  score=$((score+3))
+  echo "⚠️ Indícios de uso recente de Depuração WiFi"
+  score=$((score+4))
 else
-  echo "✅ Nenhum pairing ou remoção WiFi detectada"
+  echo "✅ Nenhum pairing ou remoção WiFi detectada nos logs"
 fi
 
 # =====================
@@ -189,6 +194,6 @@ echo ""
 echo "📄 Log salvo em: $LOG"
 
 echo ""
-echo "╔══════════════════════════════╗"
-echo "║ ✔ SCAN FINALIZADO  H O O K I N G  ║"
-echo "╚══════════════════════════════╝"
+echo "╔════════════════════════════════════╗"
+echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
+echo "╚════════════════════════════════════╝"
