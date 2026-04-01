@@ -43,7 +43,7 @@ conectar_adb() {
 }
 
 # =====================
-# SCAN DE ARQUIVOS MODIFICADOS (com data/hora + caminho completo)
+# SCAN DE ARQUIVOS MODIFICADOS (data/hora + caminho completo)
 # =====================
 scan_freefire_files() {
     local pkg="$1"
@@ -87,7 +87,7 @@ scan_freefire_files() {
 }
 
 # =====================
-# FUNÇÃO PRINCIPAL DE SCAN
+# FUNÇÃO PRINCIPAL DE SCAN (CORRIGIDA)
 # =====================
 fazer_scan() {
     clear
@@ -138,9 +138,7 @@ fazer_scan() {
         echo "✅ Nenhum arquivo crítico encontrado"
     fi
 
-    # =====================
-    # NOVA SEÇÃO: FONTE DE INSTALAÇÃO VIA TODAS AS LOGS (como você pediu)
-    # =====================
+    # FONTE DE INSTALAÇÃO VIA TODAS AS LOGS
     echo ""
     echo "📦 [FONTE DE INSTALAÇÃO VIA LOGS DO SISTEMA]"
     echo "Buscando em TODAS as logs do Android..."
@@ -152,7 +150,7 @@ fazer_scan() {
         echo ""
         echo "🎮 $nome ($pkg)"
 
-        INSTALL_LOGS=$(logcat -d -v time -b all 2>/dev/null | grep -iE "$pkg" | grep -iE 'install|installer|package.*added|pm install|app installed' | tail -n 25)
+        INSTALL_LOGS=$(logcat -d -v time -b all 2>/dev/null | grep -i "$pkg" | grep -iE 'install|installer|package.*added|pm install|app installed|installed package' | tail -n 25)
 
         if [ -n "$INSTALL_LOGS" ]; then
             echo "   📅 Registros de instalação encontrados:"
@@ -167,7 +165,7 @@ fazer_scan() {
         fi
     done
 
-    # Pareamento WiFi Debug (mantido)
+    # PAREAMENTO WIFI DEBUG (corrigido)
     echo ""
     echo "🔗 [PAREAMENTO / DESPAREAMENTO WIFI DEBUG]"
     EVENTS=$(logcat -d -v time -b all 2>/dev/null | grep -iE 'pairing|unpair|pareamento|despareamento|forget|remove|AdbDebuggingManager|wifi.*debug|adb.*wireless' | tail -n 80)
@@ -176,10 +174,15 @@ fazer_scan() {
         echo "🚨 Registros encontrados:"
         echo "$EVENTS" | while read -r line; do
             ts=$(echo "$line" | awk '{print $1 " " $2}')
-            tipo="EVENTO"
-            [[ "$line" =\~ (pairing|pareamento) ]] && tipo="PAREAMENTO"
-            [[ "$line" =\~ (unpair|despareamento|forget|remove) ]] && tipo="DESPAREAMENTO"
             relato=$(echo "$line" | cut -d' ' -f3-)
+            
+            tipo="EVENTO"
+            if echo "$line" | grep -qiE "pairing|pareamento"; then
+                tipo="PAREAMENTO"
+            elif echo "$line" | grep -qiE "unpair|despareamento|forget|remove"; then
+                tipo="DESPAREAMENTO"
+            fi
+            
             echo "   📅 $ts → [$tipo] $relato"
         done
         score=$((score+20))
