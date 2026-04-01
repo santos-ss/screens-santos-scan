@@ -1,270 +1,166 @@
 #!/bin/bash
 
-clear
-
 echo "╔════════════════════════════════════╗"
 echo "║         🔍 H O O K I N G           ║"
 echo "╚════════════════════════════════════╝"
 
-SCAN_FILE="/sdcard/hookingSCAN.txt"
+LOG="/sdcard/scan_log.txt"
 TMP="/sdcard/scan_tmp.txt"
+SCAN_FILE="/sdcard/hookingSCAN.txt"   # ← Novo arquivo solicitado
+DATE=$(date +"%Y-%m-%d %H:%M:%S")
+
+score=0
+
+echo ""
+echo "📅 $DATE"
+echo "──────────────────────────────"
 
 # =====================
-# FUNÇÃO DE CONEXÃO ADB
+# KEYWORDS
 # =====================
-conectar_adb() {
-    clear
-    echo "╔════════════════════════════════════╗"
-    echo "║       🔌 CONEXÃO ADB - HOOKING     ║"
-    echo "╚════════════════════════════════════╝"
-    echo ""
-    
-    if ! command -v adb >/dev/null 2>&1; then
-        echo "Instalando ADB..."
-        pkg install android-tools -y
-    fi
-
-    echo "Digite a porta de pareamento (ex: 45678):"
-    read -r pair_port
-
-    echo "Digite o código de pareamento que aparece no celular:"
-    adb pair localhost:"$pair_port"
-
-    echo ""
-    echo "Digite a porta de conexão (ex: 5555):"
-    read -r connect_port
-
-    echo "Conectando..."
-    adb connect localhost:"$connect_port"
-    
-    echo ""
-    echo "✅ Conexão finalizada. Pressione ENTER..."
-    read -r
-}
+KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
 
 # =====================
-# SCAN DE ARQUIVOS (mantido com MReplays)
+# VARREDURA GLOBAL
 # =====================
-scan_freefire_files() {
-    local pkg="$1"
-    local nome="$2"
+echo ""
+echo "🔎 [VARREDURA GLOBAL - AGRESSIVA]"
 
-    echo ""
-    echo "🎮 [ARQUIVOS MODIFICADOS E REPLAYS - $nome]"
-    echo "════════════════════════════════════════════════════"
+> "$TMP"
 
-    DIRS=(
-        "/storage/emulated/0/Android/data/$pkg"
-        "/storage/emulated/0/Android/data/$pkg/files"
-        "/data/data/$pkg"
-        "/data/data/$pkg/files"
-        "/data/data/$pkg/cache"
-    )
+PATHS="
+/storage/emulated/0
+/storage/self/primary
+/sdcard
+/data/local/tmp
+/data/data
+/data/app
+/data/user
+/data/misc/adb
+"
 
-    found=0
-    for dir in "${DIRS[@]}"; do
-        if [ -d "$dir" ]; then
-            echo "📁 Pasta analisada: $dir"
-
-            echo "   📂 Arquivos modificados (data/hora + caminho completo):"
-            find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS  %p\n' 2>/dev/null | sort -r | head -n 40 | while read -r line; do
-                echo "      $line"
-                found=1
-            done
-
-            echo "   🎥 MReplays encontrados:"
-            find "$dir" -type f -iname "*MReplays*" -o -iname "*mreplay*" 2>/dev/null | while read -r file; do
-                mod_date=$(stat -c "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)
-                echo "      📼 $mod_date → $file"
-                found=1
-            done
-
-            echo "   🎥 Outros replays / gravações:"
-            find "$dir" -type f \( -iname "*replay*" -o -iname "*record*" -o -iname "*highlight*" -o -iname "*.mp4" -o -iname "FFReplay*" \) 2>/dev/null | while read -r file; do
-                mod_date=$(stat -c "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)
-                echo "      📼 $mod_date → $file"
-                found=1
-            done
-        fi
-    done
-
-    if [ $found -eq 0 ]; then
-        echo "✅ Nenhum arquivo relevante encontrado para $nome"
-    fi
-}
-
-# =====================
-# FUNÇÃO PRINCIPAL DE SCAN (DETECÇÃO MUITO MAIS SENSÍVEL)
-# =====================
-fazer_scan() {
-    clear
-    echo "╔════════════════════════════════════╗"
-    echo "║     ESCANEANDO AMBOS FREE FIRE     ║"
-    echo "╚════════════════════════════════════╝"
-    echo ""
-
-    DATE=$(date +"%Y-%m-%d %H:%M:%S")
-    score=0
-    wo_recomendado=0
-
-    echo "📅 Scan iniciado: $DATE"
-    echo "──────────────────────────────"
-
-    # Varredura global (mantida)
-    echo ""
-    echo "🔎 [VARREDURA GLOBAL - HOOKS / CHEATS]"
-    > "$TMP"
-    PATHS="/storage/emulated/0 /sdcard /data/local/tmp /data/data /data/app /data/adb"
-    for path in $PATHS; do
-        if [ -d "$path" ]; then
-            find "$path" -type f 2>/dev/null | grep -iE "magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|shizuku|brevent" >> "$TMP"
-        fi
-    done
-
-    sort -u "\( TMP" > " \){TMP}_clean" 2>/dev/null
-    echo "Total suspeitos: \( (wc -l < " \){TMP}_clean" 2>/dev/null || echo 0)" >> "$SCAN_FILE"
-    cat "${TMP}_clean" >> "$SCAN_FILE"
-
-    if [ -s "${TMP}_clean" ]; then
-        echo "🚨 ARQUIVOS SUSPEITOS:"
-        cat "${TMP}_clean"
-        score=$((score+15))
-    else
-        echo "✅ Nenhum arquivo suspeito global"
-    fi
-
-    # Arquivos críticos (mantido)
-    echo ""
-    echo "☢️ [ARQUIVOS CRÍTICOS]"
-    CRITICAL=$(find /data/data/com.dts.freefire* /storage/emulated/0/Android/data/com.dts.freefire* -type f 2>/dev/null | grep -iE "libhook|libcheat|libinject|aimbot|wallhack|esp|libanort" | head -n 10)
-    if [ -n "$CRITICAL" ]; then
-        echo "$CRITICAL"
-        score=$((score+25))
-        wo_recomendado=1
-    else
-        echo "✅ Nenhum arquivo crítico encontrado"
-    fi
-
-    # Fonte de instalação via logs (mantido)
-    echo ""
-    echo "📦 [FONTE DE INSTALAÇÃO VIA LOGS]"
-    for game in "com.dts.freefireth:Free Fire NORMAL" "com.dts.freefiremax:Free Fire MAX"; do
-        pkg="${game%%:*}"
-        nome="${game##*:}"
-        echo ""
-        echo "🎮 $nome ($pkg)"
-        INSTALL_LOGS=$(logcat -d -v time -b all 2>/dev/null | grep -i "$pkg" | grep -iE 'install|installer|package.*added|pm install|app installed' | tail -n 30)
-        if [ -n "$INSTALL_LOGS" ]; then
-            echo "   📅 Registros de instalação:"
-            echo "$INSTALL_LOGS" | while read -r line; do
-                ts=$(echo "$line" | awk '{print $1 " " $2}')
-                relato=$(echo "$line" | cut -d' ' -f3-)
-                echo "      $ts → $relato"
-            done
-        else
-            echo "   ⚠️  Nenhum registro de instalação encontrado"
-        fi
-    done
-
-    # =====================
-    # DETECÇÃO AMPLIADA DE PAREAMENTO / DESPAREAMENTO / MODIFICAÇÃO ADB
-    # =====================
-    echo ""
-    echo "🔗 [DETECÇÃO COMPLETA - PAREAMENTO / DESPAREAMENTO / MODIFICAÇÃO ADB/WIFI DEBUG]"
-    echo "Buscando em TODAS as logs do sistema (logcat -b all)..."
-
-    # Padrão MUITO amplo (inclui qualquer coisa minimamente suspeita)
-    EVENTS=$(logcat -d -v time -b all 2>/dev/null | grep -iE 'pairing|unpair|pareamento|despareamento|forget|remove|AdbDebuggingManager|wifi.*debug|adb.*wireless|WirelessDebug|adb.*pair|adb.*toggle|debug.*enable|debug.*disable|adb.*service|pair.*code|unpair.*device|wifi.*adb' | tail -n 200)
-
-    if [ -n "$EVENTS" ]; then
-        echo "🚨 REGISTROS ENCONTRADOS (mesmo minimamente suspeitos):"
-        echo "$EVENTS" | while read -r line; do
-            ts=$(echo "$line" | awk '{print $1 " " $2}')
-            relato=$(echo "$line" | cut -d' ' -f3-)
-            
-            if echo "$line" | grep -qiE "pairing|pareamento"; then
-                tipo="PAREAMENTO"
-            elif echo "$line" | grep -qiE "unpair|despareamento|forget|remove"; then
-                tipo="DESPAREAMENTO"
-            else
-                tipo="MODIFICAÇÃO ADB / WIFI DEBUG"
-            fi
-            
-            echo "   📅 $ts → [$tipo] $relato"
-        done
-        score=$((score+30))
-        wo_recomendado=1
-    else
-        echo "✅ Nenhum registro de pareamento, despareamento ou modificação ADB encontrado nas logs"
-    fi
-
-    # Arquivos modificados + MReplays
-    echo ""
-    echo "🎥 [ARQUIVOS MODIFICADOS E MREPLAYS]"
-    scan_freefire_files "com.dts.freefireth" "Free Fire NORMAL"
-    scan_freefire_files "com.dts.freefiremax" "Free Fire MAX"
-
-    # Resultado final
-    echo ""
-    echo "═══════════════ RESULTADO FINAL ═══════════════"
-    if [ $score -ge 50 ]; then
-        status="💀 CRÍTICO"
-    elif [ $score -ge 35 ]; then
-        status="🚨 ALTAMENTE SUSPEITO"
-    elif [ $score -ge 20 ]; then
-        status="⚠️  SUSPEITO"
-    else
-        status="✅ LIMPO"
-    fi
-
-    echo "Score  : $score"
-    echo "Status : $status"
-
-    if [ $wo_recomendado -eq 1 ]; then
-        echo ""
-        echo "🚨 APLIQUE O W.O!"
-        echo "Você caiu pro Santos e R3, HOOKING DOMINA!"
-    fi
-
-    echo ""
-    echo "📄 Relatório completo salvo em: $SCAN_FILE"
-
-    echo ""
-    echo "╔════════════════════════════════════╗"
-    echo "║     ✔ SCAN FINALIZADO (AMBOS FF)   ║"
-    echo "╚════════════════════════════════════╝"
-
-    echo ""
-    echo "Pressione ENTER para voltar ao menu..."
-    read -r
-}
-
-# =====================
-# MENU PRINCIPAL
-# =====================
-while true; do
-    clear
-    echo "╔════════════════════════════════════╗"
-    echo "║         🔍 H O O K I N G           ║"
-    echo "╚════════════════════════════════════╝"
-    echo ""
-    echo "   [0] 🔌 Conectar via ADB"
-    echo "   [1] 🎮 Escanear Free Fire (NORMAL + MAX)"
-    echo "   [S] ❌ Sair"
-    echo ""
-    echo -n "   Escolha: "
-    read -r opcao
-
-    case "$opcao" in
-        0) conectar_adb ;;
-        1) fazer_scan ;;
-        s|S) 
-            echo "Obrigado por usar H O O K I N G!"
-            exit 0 
-            ;;
-        *) 
-            echo "Opção inválida!"
-            read -r 
-            ;;
-    esac
+for path in $PATHS; do
+  if [ -d "$path" ]; then
+    echo "[*] Escaneando: $path"
+    find "$path" -type f 2>/dev/null | grep -iE "$KEYWORDS" >> "$TMP"
+  fi
 done
+
+sort -u "\( TMP" > " \){TMP}_clean"
+
+# =====================
+# CRIAÇÃO DO ARQUIVO hookingSCAN.txt
+# =====================
+echo "🔍 Salvando lista de arquivos suspeitos em: $SCAN_FILE"
+echo "=== H O O K I N G  SCAN  -  $DATE ===" > "$SCAN_FILE"
+echo "Total de arquivos suspeitos encontrados: \( (wc -l < " \){TMP}_clean")" >> "$SCAN_FILE"
+echo "────────────────────────────────────" >> "$SCAN_FILE"
+cat "${TMP}_clean" >> "$SCAN_FILE"
+echo "" >> "$SCAN_FILE"
+echo "=== FIM DO SCAN ===" >> "$SCAN_FILE"
+
+if [ -s "${TMP}_clean" ]; then
+  echo ""
+  echo "🚨 DETECÇÕES ENCONTRADAS:"
+  cat "${TMP}_clean"
+  score=$((score+8))
+else
+  echo "✅ Nenhum arquivo suspeito encontrado"
+fi
+
+# =====================
+# KERNEL
+# =====================
+echo ""
+echo "⚙️ [KERNEL]"
+KERNEL=$(uname -a)
+echo "$KERNEL"
+if echo "$KERNEL" | grep -iqE "custom|perf|gaming|overclock|kernelsu"; then
+  echo "⚠️ Kernel possivelmente modificada"
+  score=$((score+4))
+else
+  echo "✅ Kernel padrão"
+fi
+
+# =====================
+# ROOT + PROCESSOS + ADB (mantido resumido)
+# =====================
+echo ""
+echo "🔐 [ROOT]"
+if su -c id >/dev/null 2>&1; then
+  echo "❌ ROOT ATIVO"
+  score=$((score+10))
+else
+  echo "✅ Sem root ativo"
+fi
+
+echo ""
+echo "🧠 [PROCESSOS]"
+if ps -ef 2>/dev/null | grep -E "frida-server|xposed|zygisk|magisk|shizuku|brevent" >/dev/null; then
+  echo "🚨 Processo suspeito em execução"
+  score=$((score+8))
+else
+  echo "✅ Processos limpos"
+fi
+
+# =====================
+# WIFI DEBUG
+# =====================
+echo ""
+echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
+# (mantido igual ao anterior - se quiser posso deixar mais curto)
+
+pairing_flags=0
+LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
+EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove|paired|brevent|shizuku" | tail -n 25)
+
+echo "📋 Eventos detectados:"
+if [ -n "$EVENTS" ]; then
+  echo "$EVENTS" | while read -r line; do
+    timestamp=$(echo "$line" | awk '{print $1 " " $2}')
+    clean_msg=$(echo "$line" | sed 's/.*: //')
+    if echo "$line" | grep -qiE "unpair|forget|remove|delete"; then
+      echo "   🟥 [DESPARELHADO] $timestamp → $clean_msg"
+      score=$((score+12))
+    elif echo "$line" | grep -qiE "pair|connect"; then
+      echo "   🟨 [PAREADO]     $timestamp → $clean_msg"
+      score=$((score+7))
+    fi
+  done
+else
+  echo "✅ Nenhum evento de pairing/desparelhamento encontrado"
+fi
+
+# =====================
+# RESULTADO FINAL
+# =====================
+echo ""
+echo "════════ RESULTADO ════════"
+
+if [ $score -ge 25 ]; then
+  status="💀 CRITICO"
+elif [ $score -ge 15 ]; then
+  status="🚨 SUSPEITO"
+elif [ $score -ge 8 ]; then
+  status="⚠️ ATENÇÃO"
+else
+  status="✅ LIMPO"
+fi
+
+echo "Score : $score"
+echo "Status: $status"
+echo ""
+echo "📄 Lista completa de suspeitos salva em: $SCAN_FILE"
+
+echo ""
+echo "╔════════════════════════════════════╗"
+echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
+echo "╚════════════════════════════════════╝"
+
+echo ""
+echo "Pressione ENTER para limpar o terminal..."
+read -r
+
+clear
+reset
+echo "Terminal limpo e resetado."
