@@ -43,14 +43,14 @@ conectar_adb() {
 }
 
 # =====================
-# SCAN DE ARQUIVOS MODIFICADOS (MELHORADO)
+# SCAN DE ARQUIVOS MODIFICADOS (com data/hora + caminho completo)
 # =====================
 scan_freefire_files() {
     local pkg="$1"
     local nome="$2"
 
     echo ""
-    echo "🎮 [ARQUIVOS E MODIFICAÇÕES - $nome]"
+    echo "🎮 [ARQUIVOS MODIFICADOS - $nome]"
     echo "════════════════════════════════════════════════════"
 
     DIRS=(
@@ -62,30 +62,27 @@ scan_freefire_files() {
     )
 
     found=0
-
     for dir in "${DIRS[@]}"; do
         if [ -d "$dir" ]; then
-            echo "📁 Pasta analisada: $dir"
+            echo "📁 Pasta: $dir"
 
-            # Arquivos modificados com data/hora completa + nome + caminho
-            echo "   📂 Arquivos modificados (mais recentes primeiro):"
-            find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS  %p\n' 2>/dev/null | sort -r | head -n 30 | while read -r line; do
+            echo "   📂 Arquivos modificados (data/hora completa + caminho):"
+            find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS  %p\n' 2>/dev/null | sort -r | head -n 35 | while read -r line; do
                 echo "      $line"
                 found=1
             done
 
-            # Busca específica por replays
-            echo "   🎥 Replays / Gravações encontrados:"
+            echo "   🎥 Replays / Gravações:"
             find "$dir" -type f \( -iname "*replay*" -o -iname "*record*" -o -iname "*highlight*" -o -iname "*.mp4" -o -iname "FFReplay*" \) 2>/dev/null | while read -r file; do
                 mod_date=$(stat -c "%Y-%m-%d %H:%M:%S" "$file" 2>/dev/null)
-                echo "      📼 $mod_date  →  $file"
+                echo "      📼 $mod_date → $file"
                 found=1
             done
         fi
     done
 
     if [ $found -eq 0 ]; then
-        echo "✅ Nenhum arquivo relevante encontrado para $nome"
+        echo "✅ Nenhum arquivo encontrado para $nome"
     fi
 }
 
@@ -103,14 +100,13 @@ fazer_scan() {
     score=0
     wo_recomendado=0
 
-    echo "📅 Scan iniciado em: $DATE"
+    echo "📅 Scan iniciado: $DATE"
     echo "──────────────────────────────"
 
     # Varredura global de hooks
     echo ""
     echo "🔎 [VARREDURA GLOBAL - HOOKS / CHEATS]"
     > "$TMP"
-
     PATHS="/storage/emulated/0 /sdcard /data/local/tmp /data/data /data/app /data/adb"
     for path in $PATHS; do
         if [ -d "$path" ]; then
@@ -119,16 +115,15 @@ fazer_scan() {
     done
 
     sort -u "\( TMP" > " \){TMP}_clean" 2>/dev/null
-
-    echo "Total suspeitos globais: \( (wc -l < " \){TMP}_clean" 2>/dev/null || echo 0)" >> "$SCAN_FILE"
+    echo "Total suspeitos: \( (wc -l < " \){TMP}_clean" 2>/dev/null || echo 0)" >> "$SCAN_FILE"
     cat "${TMP}_clean" >> "$SCAN_FILE"
 
     if [ -s "${TMP}_clean" ]; then
-        echo "🚨 ARQUIVOS SUSPEITOS:"
+        echo "🚨 ARQUIVOS SUSPEITOS ENCONTRADOS:"
         cat "${TMP}_clean"
         score=$((score+15))
     else
-        echo "✅ Nenhum arquivo suspeito global encontrado"
+        echo "✅ Nenhum arquivo suspeito global"
     fi
 
     # Arquivos críticos
@@ -143,9 +138,12 @@ fazer_scan() {
         echo "✅ Nenhum arquivo crítico encontrado"
     fi
 
-    # Origem de instalação (corrigido para reduzir falso positivo)
+    # =====================
+    # NOVA SEÇÃO: FONTE DE INSTALAÇÃO VIA TODAS AS LOGS (como você pediu)
+    # =====================
     echo ""
-    echo "📦 [ORIGEM DE INSTALAÇÃO]"
+    echo "📦 [FONTE DE INSTALAÇÃO VIA LOGS DO SISTEMA]"
+    echo "Buscando em TODAS as logs do Android..."
 
     for game in "com.dts.freefireth:Free Fire NORMAL" "com.dts.freefiremax:Free Fire MAX"; do
         pkg="${game%%:*}"
@@ -154,26 +152,22 @@ fazer_scan() {
         echo ""
         echo "🎮 $nome ($pkg)"
 
-        installer=$(cmd package get-installer "$pkg" 2>/dev/null | sed -n 's/.*installerPackageName=\(.*\)/\1/p' | tr -d '[:space:]' || echo "")
-        if [ -z "$installer" ]; then
-            installer=$(pm get-installer "$pkg" 2>/dev/null | sed -n 's/.*installerPackageName=\(.*\)/\1/p' | tr -d '[:space:]' || echo "NÃO DETECTADO")
-        fi
+        INSTALL_LOGS=$(logcat -d -v time -b all 2>/dev/null | grep -iE "$pkg" | grep -iE 'install|installer|package.*added|pm install|app installed' | tail -n 25)
 
-        echo "   🔹 Origem detectada : ${installer:-NÃO DETECTADO}"
-
-        if [[ "$installer" == "com.android.vending" ]]; then
-            echo "   ✅ Oficial - Google Play Store"
-        elif [[ "$installer" == "NÃO DETECTADO" ]]; then
-            echo "   ⚠️  Não foi possível detectar (comum no Termux sem root)"
-            echo "   ℹ️  Não considerado APKMOD automaticamente"
+        if [ -n "$INSTALL_LOGS" ]; then
+            echo "   📅 Registros de instalação encontrados:"
+            echo "$INSTALL_LOGS" | while read -r line; do
+                ts=$(echo "$line" | awk '{print $1 " " $2}')
+                relato=$(echo "$line" | cut -d' ' -f3-)
+                echo "      $ts → $relato"
+            done
+            score=$((score+10))
         else
-            echo "   ⚠️  POSSÍVEL APKMOD ou instalação sideload"
-            score=$((score+18))
-            wo_recomendado=1
+            echo "   ⚠️  Nenhum registro de instalação encontrado nas logs para este jogo"
         fi
     done
 
-    # Pareamento WiFi Debug
+    # Pareamento WiFi Debug (mantido)
     echo ""
     echo "🔗 [PAREAMENTO / DESPAREAMENTO WIFI DEBUG]"
     EVENTS=$(logcat -d -v time -b all 2>/dev/null | grep -iE 'pairing|unpair|pareamento|despareamento|forget|remove|AdbDebuggingManager|wifi.*debug|adb.*wireless' | tail -n 80)
@@ -183,18 +177,18 @@ fazer_scan() {
         echo "$EVENTS" | while read -r line; do
             ts=$(echo "$line" | awk '{print $1 " " $2}')
             tipo="EVENTO"
-            if echo "$line" | grep -qiE "pairing|pareamento"; then tipo="PAREAMENTO"; fi
-            if echo "$line" | grep -qiE "unpair|despareamento|forget|remove"; then tipo="DESPAREAMENTO"; fi
+            [[ "$line" =\~ (pairing|pareamento) ]] && tipo="PAREAMENTO"
+            [[ "$line" =\~ (unpair|despareamento|forget|remove) ]] && tipo="DESPAREAMENTO"
             relato=$(echo "$line" | cut -d' ' -f3-)
             echo "   📅 $ts → [$tipo] $relato"
         done
         score=$((score+20))
         wo_recomendado=1
     else
-        echo "✅ Nenhum registro de pareamento/despareamento encontrado"
+        echo "✅ Nenhum registro de pareamento encontrado"
     fi
 
-    # Arquivos e replays dos dois jogos
+    # Arquivos modificados
     echo ""
     echo "🎥 [ARQUIVOS MODIFICADOS E REPLAYS]"
     scan_freefire_files "com.dts.freefireth" "Free Fire NORMAL"
@@ -223,7 +217,12 @@ fazer_scan() {
     fi
 
     echo ""
-    echo "📄 Relatório salvo em: $SCAN_FILE"
+    echo "📄 Relatório completo salvo em: $SCAN_FILE"
+
+    echo ""
+    echo "╔════════════════════════════════════╗"
+    echo "║     ✔ SCAN FINALIZADO (AMBOS FF)   ║"
+    echo "╚════════════════════════════════════╝"
 
     echo ""
     echo "Pressione ENTER para voltar ao menu..."
@@ -231,7 +230,7 @@ fazer_scan() {
 }
 
 # =====================
-# MENU
+# MENU PRINCIPAL
 # =====================
 while true; do
     clear
