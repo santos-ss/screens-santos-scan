@@ -6,7 +6,8 @@ echo "╚═══════════════════════�
 
 LOG="/sdcard/scan_log.txt"
 TMP="/sdcard/scan_tmp.txt"
-SCAN_FILE="/sdcard/hookingSCAN.txt"   # ← Novo arquivo solicitado
+SCAN_FILE="/sdcard/hookingSCAN.txt"
+SUS_LOG="/sdcard/logsSUS.txt"
 DATE=$(date +"%Y-%m-%d %H:%M:%S")
 
 score=0
@@ -16,12 +17,12 @@ echo "📅 $DATE"
 echo "──────────────────────────────"
 
 # =====================
-# KEYWORDS
+# KEYWORDS (ampliada para logs do sistema)
 # =====================
-KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
+KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu|AdbDebuggingManager|wireless|pairing|pair|unpair|forget|remove|paired|bond|bonding|bluetooth|wifi|connect|disconnect|connection|debug|root|su|magisk|frida|zygisk|xposed|shizuku|brevent"
 
 # =====================
-# VARREDURA GLOBAL
+# VARREDURA GLOBAL DE ARQUIVOS
 # =====================
 echo ""
 echo "🔎 [VARREDURA GLOBAL - AGRESSIVA]"
@@ -49,7 +50,7 @@ done
 sort -u "\( TMP" > " \){TMP}_clean"
 
 # =====================
-# CRIAÇÃO DO ARQUIVO hookingSCAN.txt
+# SALVANDO hookingSCAN.txt
 # =====================
 echo "🔍 Salvando lista de arquivos suspeitos em: $SCAN_FILE"
 echo "=== H O O K I N G  SCAN  -  $DATE ===" > "$SCAN_FILE"
@@ -83,7 +84,7 @@ else
 fi
 
 # =====================
-# ROOT + PROCESSOS + ADB (mantido resumido)
+# ROOT + PROCESSOS
 # =====================
 echo ""
 echo "🔐 [ROOT]"
@@ -104,31 +105,46 @@ else
 fi
 
 # =====================
-# WIFI DEBUG
+# ANÁLISE COMPLETA DE TODAS AS LOGS DO SISTEMA
 # =====================
 echo ""
-echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
-# (mantido igual ao anterior - se quiser posso deixar mais curto)
+echo "🔗 [ANÁLISE COMPLETA DE TODAS AS LOGS DO SISTEMA]"
 
-pairing_flags=0
+# Captura TODAS as logs disponíveis no logcat (sem limite de linhas)
 LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
-EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove|paired|brevent|shizuku" | tail -n 25)
 
-echo "📋 Eventos detectados:"
+# Busca por TODOS os eventos relacionados (arquivos + pairing + conexões)
+EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "$KEYWORDS" | tail -n 200)
+
+echo "📋 Total de eventos suspeitos encontrados nas logs do sistema: $(echo "$LOGCAT_FULL" | grep -iE "$KEYWORDS" | wc -l)"
+
 if [ -n "$EVENTS" ]; then
   echo "$EVENTS" | while read -r line; do
-    timestamp=$(echo "$line" | awk '{print $1 " " $2}')
+    timestamp=$(echo "$line" | awk '{print $1 " " $2}' 2>/dev/null || echo "$DATE")
     clean_msg=$(echo "$line" | sed 's/.*: //')
-    if echo "$line" | grep -qiE "unpair|forget|remove|delete"; then
-      echo "   🟥 [DESPARELHADO] $timestamp → $clean_msg"
+
+    if echo "$line" | grep -qiE "unpair|forget|remove|delete|disconnect"; then
+      echo "   🟥 [DESPARELHADO/DESCONECTADO] $timestamp → $clean_msg"
       score=$((score+12))
-    elif echo "$line" | grep -qiE "pair|connect"; then
-      echo "   🟨 [PAREADO]     $timestamp → $clean_msg"
+    elif echo "$line" | grep -qiE "pair|bond|connect|paired"; then
+      echo "   🟨 [PAREADO/CONECTADO]     $timestamp → $clean_msg"
       score=$((score+7))
+    else
+      echo "   🔵 [EVENTO SUSPEITO]      $timestamp → $clean_msg"
     fi
+
+    # Salva TODA linha encontrada no logsSUS.txt (histórico completo)
+    echo "[$DATE] $line" >> "$SUS_LOG"
   done
 else
-  echo "✅ Nenhum evento de pairing/desparelhamento encontrado"
+  echo "✅ Nenhuma atividade suspeita encontrada em TODAS as logs do sistema"
+fi
+
+# Cabeçalho do logsSUS.txt (caso ainda não exista)
+if [ ! -s "$SUS_LOG" ]; then
+  echo "=== LOGS SUSPEITOS DE CONEXÃO / PAREAMENTO / HOOKING ===" > "$SUS_LOG"
+  echo "Arquivo criado em: $DATE" >> "$SUS_LOG"
+  echo "────────────────────────────────────────────" >> "$SUS_LOG"
 fi
 
 # =====================
@@ -150,12 +166,15 @@ fi
 echo "Score : $score"
 echo "Status: $status"
 echo ""
-echo "📄 Lista completa de suspeitos salva em: $SCAN_FILE"
+echo "📄 Lista completa de arquivos suspeitos salva em: $SCAN_FILE"
+echo "📋 Análise completa de TODAS as logs salva em: $SUS_LOG"
 
 echo ""
 echo "╔════════════════════════════════════╗"
 echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
 echo "╚════════════════════════════════════╝"
+
+echo "HOOKING DOMINA"
 
 echo ""
 echo "Pressione ENTER para limpar o terminal..."
