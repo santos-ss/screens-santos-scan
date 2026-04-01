@@ -44,7 +44,7 @@ conectar_adb() {
 }
 
 # =====================
-# NOVA FUNÇÃO: SCAN DE REPLAYS E MODIFICAÇÕES
+# SCAN DE REPLAYS E MODIFICAÇÕES
 # =====================
 scan_freefire_replays() {
     local pkg="$1"
@@ -65,14 +65,12 @@ scan_freefire_replays() {
 
     for dir in "${DIRS[@]}"; do
         if [ -d "$dir" ]; then
-            # Replays e gravações
             find "$dir" -type f \( -name "*replay*" -o -name "*record*" -o -name "*highlight*" -o -name "*.mp4" -o -name "*.replay" -o -name "FFReplay*" \) 2>/dev/null | while read -r file; do
                 mod_date=$(stat -c "%y" "$file" 2>/dev/null | cut -d. -f1)
                 echo "   📼 REPLAY → $mod_date | $file"
                 found=1
             done
 
-            # Arquivos modificados recentemente
             echo "   📂 Arquivos modificados recentemente:"
             find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -r | head -n 25
             found=1
@@ -85,7 +83,7 @@ scan_freefire_replays() {
 }
 
 # =====================
-# FUNÇÃO PRINCIPAL DE SCAN (MELHORADA)
+# FUNÇÃO PRINCIPAL DE SCAN
 # =====================
 fazer_scan() {
     clear
@@ -96,7 +94,7 @@ fazer_scan() {
 
     DATE=$(date +"%Y-%m-%d %H:%M:%S")
     score=0
-    wo_recomendado=0   # Controle para W.O
+    wo_recomendado=0
 
     echo "📅 $DATE"
     echo "──────────────────────────────"
@@ -131,7 +129,7 @@ fazer_scan() {
     fi
 
     # =====================
-    # ARQUIVOS CRÍTICOS (NOVO ALERTA FORTE)
+    # ARQUIVOS CRÍTICOS
     # =====================
     echo ""
     echo "☢️ [ALERTA ARQUIVOS CRÍTICOS - FREE FIRE]"
@@ -141,17 +139,17 @@ fazer_scan() {
     critical_found=$(find /data/data/com.dts.freefireth /data/data/com.dts.freefiremax /storage/emulated/0/Android/data/com.dts.freefire* -type f 2>/dev/null | grep -iE "$CRITICAL_PATTERNS" | head -n 10)
 
     if [ -n "$critical_found" ]; then
-        echo "💥 ARQUIVOS CRÍTICOS DETECTADOS (ALTO RISCO DE CHEAT):"
+        echo "💥 ARQUIVOS CRÍTICOS DETECTADOS:"
         echo "$critical_found"
         score=$((score+25))
         wo_recomendado=1
         echo "⚠️  ALERTA MÁXIMO: ARQUIVOS DE CHEAT NATIVOS ENCONTRADOS!"
     else
-        echo "✅ Nenhum arquivo crítico (libhook, aimbot, etc.) encontrado"
+        echo "✅ Nenhum arquivo crítico encontrado"
     fi
 
     # =====================
-    # MAGISK + ROOT (mantido e reforçado)
+    # MAGISK / ROOT
     # =====================
     echo ""
     echo "🧬 [MAGISK / ROOT DETECÇÃO AVANÇADA]"
@@ -179,7 +177,76 @@ fazer_scan() {
     fi
 
     # =====================
-    # REPLAYS E MODIFICAÇÕES (ambos jogos)
+    # NOVA DETECÇÃO: ORIGEM + CERTIFICADO (APKMOD / METADATA)
+    # =====================
+    echo ""
+    echo "📦 [ORIGEM REAL DE INSTALAÇÃO E CERTIFICADO]"
+    echo "Verificando se é APKMOD ou certificado diferente..."
+
+    for game in "com.dts.freefireth:Free Fire NORMAL" "com.dts.freefiremax:Free Fire MAX"; do
+        pkg="${game%%:*}"
+        nome="${game##*:}"
+
+        echo ""
+        echo "🎮 $nome ($pkg)"
+
+        # Origem de instalação (primeira verdadeira)
+        installer=$(pm get-installer "$pkg" 2>/dev/null || echo "NÃO DETECTADO")
+        echo "   🔹 Primeira origem de instalação: $installer"
+
+        if [[ "$installer" == "com.android.vending" ]]; then
+            echo "   ✅ Oficial (Google Play Store)"
+        else
+            echo "   ⚠️  POSSÍVEL APKMOD / METADATA ALTERADO / SIDEDLOAD"
+            score=$((score+20))
+            wo_recomendado=1
+        fi
+
+        # Certificado SHA256 + metadados
+        cert_sha=$(dumpsys package "$pkg" 2>/dev/null | grep -o 'sha256:[0-9a-fA-F]\{64\}' | head -n1)
+        first_install=$(dumpsys package "$pkg" 2>/dev/null | grep -o 'firstInstallTime=[^ ]*' | cut -d= -f2)
+        last_update=$(dumpsys package "$pkg" 2>/dev/null | grep -o 'lastUpdateTime=[^ ]*' | cut -d= -f2)
+
+        echo "   📜 Certificado SHA256: ${cert_sha:-NÃO EXTRAÍDO}"
+        echo "   📅 Primeira instalação: ${first_install:-N/A}"
+        echo "   📅 Última atualização:  ${last_update:-N/A}"
+
+        if [[ -z "$cert_sha" || "$installer" != "com.android.vending" ]]; then
+            echo "   💥 ALERTA: Certificado ou origem diferente do oficial → APKMOD provável!"
+        fi
+    done
+
+    # =====================
+    # DETECÇÃO DE PAREAMENTO/DESPAREAMENTO (mantida)
+    # =====================
+    echo ""
+    echo "🔗 [DETECÇÃO DE PAREAMENTO / DESPAREAMENTO WIFI DEBUG]"
+    echo "Buscando em TODOS os logs do Android (logcat)..."
+
+    EVENTS=$(logcat -d -v time -b all 2>/dev/null | grep -iE 'pairing|unpair|pareamento|despareamento|forget|remove|AdbDebuggingManager|wifi.*debug|adb.*wireless|WirelessDebug|adb.*pair' | tail -n 100)
+
+    if [ -n "$EVENTS" ]; then
+        echo "🚨 RELATOS DE PAREAMENTO/DESPAREAMENTO ENCONTRADOS:"
+        echo "$EVENTS" | while read -r line; do
+            ts=$(echo "$line" | awk '{print $1 " " $2}')
+            if echo "$line" | grep -qiE "pairing|pareamento"; then
+                tipo="PAREAMENTO (WiFi Debug)"
+            elif echo "$line" | grep -qiE "unpair|despareamento|forget|remove"; then
+                tipo="DESPAREAMENTO / REMOÇÃO"
+            else
+                tipo="EVENTO ADB/WIFI"
+            fi
+            relato=$(echo "$line" | cut -d' ' -f3-)
+            echo "   📅 $ts → [$tipo] $relato"
+        done
+        score=$((score+20))
+        wo_recomendado=1
+    else
+        echo "✅ Nenhum relato de pareamento/despareamento encontrado nos logs"
+    fi
+
+    # =====================
+    # REPLAYS E MODIFICAÇÕES
     # =====================
     echo ""
     echo "🎥 [REPLAYS E ARQUIVOS MODIFICADOS PÓS-PARTIDA]"
@@ -187,7 +254,7 @@ fazer_scan() {
     scan_freefire_replays "com.dts.freefiremax" "Free Fire MAX"
 
     # =====================
-    # RESULTADO FINAL + W.O
+    # RESULTADO FINAL
     # =====================
     echo ""
     echo "═══════════════ RESULTADO FINAL ═══════════════"
