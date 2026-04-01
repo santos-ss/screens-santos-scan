@@ -197,3 +197,14 @@ echo ""
 echo "╔════════════════════════════════════╗"
 echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
 echo "╚════════════════════════════════════╝"
+
+# =====================
+# 🛠️ LIMPAR TERMINAL AO PRESSIONAR ENTER
+# =====================
+echo ""
+echo "Pressione ENTER para limpar/resetar o terminal..."
+read -r
+
+clear
+reset
+echo "Terminal limpo e resetado."
