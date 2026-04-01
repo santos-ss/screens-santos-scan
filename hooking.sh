@@ -6,7 +6,6 @@ echo "╔═══════════════════════�
 echo "║         🔍 H O O K I N G           ║"
 echo "╚════════════════════════════════════╝"
 
-LOG="/sdcard/scan_log.txt"
 SCAN_FILE="/sdcard/hookingSCAN.txt"
 TMP="/sdcard/scan_tmp.txt"
 
@@ -28,18 +27,19 @@ conectar_adb() {
     echo "Digite a porta de pareamento (ex: 45678):"
     read -r pair_port
 
-    echo "Agora digite o código de pareamento que aparece no celular:"
+    echo "Digite o código de pareamento que aparece no celular:"
     adb pair localhost:"$pair_port"
 
     echo ""
-    echo "Digite a porta de conexão (ex: 12345):"
+    echo "Digite a porta de conexão (ex: 12345 ou 5555):"
     read -r connect_port
 
     echo "Conectando..."
     adb connect localhost:"$connect_port"
     
     echo ""
-    echo "✅ Conexão finalizada. Pressione ENTER para voltar ao menu..."
+    echo "✅ Conexão ADB finalizada!"
+    echo "Pressione ENTER para voltar ao menu..."
     read -r
 }
 
@@ -64,12 +64,14 @@ scan_freefire_replays() {
     found=0
     for dir in "${DIRS[@]}"; do
         if [ -d "$dir" ]; then
-            find "$dir" -type f \( -name "*replay*" -o -name "*record*" -o -name "*highlight*" -o -name "*.mp4" -o -name "*.replay" -o -name "FFReplay*" \) 2>/dev/null | while read -r file; do
+            # Replays
+            find "$dir" -type f \( -name "*replay*" -o -name "*record*" -o -name "*highlight*" -o -name "*.mp4" -o -name "FFReplay*" \) 2>/dev/null | while read -r file; do
                 mod_date=$(stat -c "%y" "$file" 2>/dev/null | cut -d. -f1)
                 echo "   📼 REPLAY → $mod_date | $file"
                 found=1
             done
 
+            # Arquivos modificados recentemente
             echo "   📂 Arquivos modificados recentemente:"
             find "$dir" -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -r | head -n 25
             found=1
@@ -82,7 +84,7 @@ scan_freefire_replays() {
 }
 
 # =====================
-# FUNÇÃO PRINCIPAL DE SCAN (ANTI FALSO POSITIVO)
+# FUNÇÃO PRINCIPAL DE SCAN (VERSÃO ESTÁVEL)
 # =====================
 fazer_scan() {
     clear
@@ -112,11 +114,11 @@ fazer_scan() {
         fi
     done
 
-    sort -u "\( TMP" > " \){TMP}_clean"
+    sort -u "\( TMP" > " \){TMP}_clean" 2>/dev/null
 
     echo "🔍 Salvando relatório em: $SCAN_FILE"
     echo "=== H O O K I N G SCAN - $DATE ===" > "$SCAN_FILE"
-    echo "Total suspeitos: \( (wc -l < " \){TMP}_clean")" >> "$SCAN_FILE"
+    echo "Total suspeitos: \( (wc -l < " \){TMP}_clean" 2>/dev/null || echo 0)" >> "$SCAN_FILE"
     cat "${TMP}_clean" >> "$SCAN_FILE"
 
     if [ -s "${TMP}_clean" ]; then
@@ -132,6 +134,7 @@ fazer_scan() {
     # =====================
     echo ""
     echo "☢️ [ALERTA ARQUIVOS CRÍTICOS - FREE FIRE]"
+
     CRITICAL_PATTERNS="libanort|libanort64|libhook|libcheat|libinject|libfrida|libzygisk|liblsposed|libmagisk|ffcheat|freefirehack|aimbot|wallhack|esp"
     critical_found=$(find /data/data/com.dts.freefireth /data/data/com.dts.freefiremax /storage/emulated/0/Android/data/com.dts.freefire* -type f 2>/dev/null | grep -iE "$CRITICAL_PATTERNS" | head -n 10)
 
@@ -149,6 +152,7 @@ fazer_scan() {
     # =====================
     echo ""
     echo "🧬 [MAGISK / ROOT DETECÇÃO AVANÇADA]"
+
     magisk_detectado=0
     if pm list packages 2>/dev/null | grep -qE 'magisk|io.github.huskydg.magisk'; then
         echo "❌ Pacote Magisk detectado"
@@ -156,6 +160,7 @@ fazer_scan() {
         score=$((score+20))
         wo_recomendado=1
     fi
+
     for dir in /data/adb/magisk /sbin/.magisk /data/adb/modules /data/adb/ksu; do
         if [ -e "$dir" ]; then
             echo "❌ Diretório root/magisk: $dir"
@@ -164,16 +169,16 @@ fazer_scan() {
             wo_recomendado=1
         fi
     done
+
     if [ $magisk_detectado -eq 0 ]; then
         echo "✅ Nenhum vestígio forte de Magisk/Root encontrado"
     fi
 
     # =====================
-    # ORIGEM REAL + CERTIFICADO (ANTI FALSO POSITIVO MELHORADO)
+    # ORIGEM REAL DE INSTALAÇÃO (COM ANTI FALSO POSITIVO)
     # =====================
     echo ""
     echo "📦 [ORIGEM REAL DE INSTALAÇÃO E CERTIFICADO]"
-    echo "Verificando Free Fire Normal e MAX..."
 
     for game in "com.dts.freefireth:Free Fire NORMAL" "com.dts.freefiremax:Free Fire MAX"; do
         pkg="${game%%:*}"
@@ -182,43 +187,38 @@ fazer_scan() {
         echo ""
         echo "🎮 $nome ($pkg)"
 
-        # Detecção robusta de installer (evita falso positivo)
-        installer=""
-        installer=$(cmd package get-installer "$pkg" 2>/dev/null | sed -n 's/.*installerPackageName=\(.*\)/\1/p' | tr -d '[:space:]')
+        # Detecção mais estável
+        installer=$(cmd package get-installer "$pkg" 2>/dev/null | sed -n 's/.*installerPackageName=\(.*\)/\1/p' | tr -d '[:space:]' || echo "")
         
         if [ -z "$installer" ]; then
-            installer=$(pm get-installer "$pkg" 2>/dev/null | sed -n 's/.*installerPackageName=\(.*\)/\1/p' | tr -d '[:space:]')
+            installer=$(pm get-installer "$pkg" 2>/dev/null | sed -n 's/.*installerPackageName=\(.*\)/\1/p' | tr -d '[:space:]' || echo "NÃO DETECTADO")
         fi
 
-        if [ -z "$installer" ]; then
-            installer="NÃO DETECTADO"
-        fi
-
-        echo "   🔹 Primeira origem de instalação: $installer"
+        echo "   🔹 Primeira origem: ${installer:-NÃO DETECTADO}"
 
         if [[ "$installer" == "com.android.vending" ]]; then
             echo "   ✅ Oficial (Google Play Store)"
-        elif [[ "$installer" == "NÃO DETECTADO" ]]; then
-            echo "   ⚠️  Não foi possível detectar a origem (comum no Termux)"
-            echo "   ℹ️  Não considerado como APKMOD"
+        elif [[ "$installer" == "NÃO DETECTADO" || -z "$installer" ]]; then
+            echo "   ⚠️  Não foi possível detectar origem (comum no Termux)"
+            echo "   ℹ️  Não considerado APKMOD"
         else
-            echo "   ⚠️  POSSÍVEL APKMOD / SIDEDLOAD / METADATA ALTERADO"
+            echo "   ⚠️  POSSÍVEL APKMOD / METADATA ALTERADO"
             score=$((score+20))
             wo_recomendado=1
         fi
 
-        # Certificado e datas (com fallback seguro)
+        # Certificado e datas
         cert_sha=$(dumpsys package "$pkg" 2>/dev/null | grep -o 'sha256:[0-9a-fA-F]\{64\}' | head -n1 || echo "NÃO EXTRAÍDO")
         first_install=$(dumpsys package "$pkg" 2>/dev/null | grep -o 'firstInstallTime=[^ ]*' | cut -d= -f2- || echo "N/A")
         last_update=$(dumpsys package "$pkg" 2>/dev/null | grep -o 'lastUpdateTime=[^ ]*' | cut -d= -f2- || echo "N/A")
 
-        echo "   📜 Certificado SHA256: $cert_sha"
-        echo "   📅 Primeira instalação: $first_install"
-        echo "   📅 Última atualização:  $last_update"
+        echo "   📜 Certificado SHA256: ${cert_sha}"
+        echo "   📅 Primeira instalação: ${first_install}"
+        echo "   📅 Última atualização:  ${last_update}"
     done
 
     # =====================
-    # PAREAMENTO / DESPAREAMENTO
+    # PAREAMENTO WIFI DEBUG
     # =====================
     echo ""
     echo "🔗 [DETECÇÃO DE PAREAMENTO / DESPAREAMENTO WIFI DEBUG]"
@@ -241,7 +241,7 @@ fazer_scan() {
         score=$((score+20))
         wo_recomendado=1
     else
-        echo "✅ Nenhum relato de pareamento/despareamento encontrado"
+        echo "✅ Nenhum relato de pareamento/despareamento encontrado nos logs"
     fi
 
     # =====================
@@ -259,4 +259,65 @@ fazer_scan() {
     echo "═══════════════ RESULTADO FINAL ═══════════════"
 
     if [ $score -ge 45 ]; then
-        status="💀
+        status="💀 CRÍTICO"
+    elif [ $score -ge 30 ]; then
+        status="🚨 ALTAMENTE SUSPEITO"
+    elif [ $score -ge 15 ]; then
+        status="⚠️  SUSPEITO"
+    else
+        status="✅ LIMPO"
+    fi
+
+    echo "Score  : $score"
+    echo "Status : $status"
+
+    if [ $wo_recomendado -eq 1 ]; then
+        echo ""
+        echo "══════════════════════════════════════════════"
+        echo "🚨 APLIQUE O W.O!"
+        echo "Você caiu pro Santos e R3, HOOKING DOMINA!"
+        echo "══════════════════════════════════════════════"
+    fi
+
+    echo ""
+    echo "📄 Relatório completo salvo em: $SCAN_FILE"
+
+    echo ""
+    echo "╔════════════════════════════════════╗"
+    echo "║     ✔ SCAN FINALIZADO (AMBOS FF)   ║"
+    echo "╚════════════════════════════════════╝"
+
+    echo ""
+    echo "Pressione ENTER para voltar ao menu..."
+    read -r
+}
+
+# =====================
+# MENU PRINCIPAL
+# =====================
+while true; do
+    clear
+    echo "╔════════════════════════════════════╗"
+    echo "║         🔍 H O O K I N G           ║"
+    echo "╚════════════════════════════════════╝"
+    echo ""
+    echo "   [0] 🔌 Conectar via ADB"
+    echo "   [1] 🎮 Escanear Free Fire (NORMAL + MAX)"
+    echo "   [S] ❌ Sair"
+    echo ""
+    echo -n "   Escolha: "
+    read -r opcao
+
+    case "$opcao" in
+        0) conectar_adb ;;
+        1) fazer_scan ;;
+        s|S) 
+            echo "Obrigado por usar H O O K I N G!"
+            exit 0 
+            ;;
+        *) 
+            echo "Opção inválida!"
+            read -r 
+            ;;
+    esac
+done
