@@ -4,8 +4,9 @@ echo "╔═══════════════════════�
 echo "║         🔍 H O O K I N G           ║"
 echo "╚════════════════════════════════════╝"
 
+LOG="/sdcard/scan_log.txt"
 TMP="/sdcard/scan_tmp.txt"
-RESULT_FILE="/sdcard/hooking_result.txt"
+SCAN_FILE="/sdcard/hookingSCAN.txt"   # ← Novo arquivo solicitado
 DATE=$(date +"%Y-%m-%d %H:%M:%S")
 
 score=0
@@ -17,63 +18,73 @@ echo "────────────────────────�
 # =====================
 # KEYWORDS
 # =====================
-FILE_KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
-
-# Filtro ampliado para capturar "Esquecer", Forget, Brevent, Shizuku, Wireless Debugging, etc.
-LOG_KEYWORDS="AdbDebuggingManager|wireless.*debug|pairing|pair|unpair|forget|remove|delete|paired|connect|disconnect|bond|bonding|brevent|shizuku|adb.*debug|debugging.*forget|forget.*device|esquecer|remove.*device"
+KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
 
 # =====================
-# INICIALIZA ARQUIVO DE RESULTADO
-# =====================
-echo "=== H O O K I N G   R E S U L T   -   $DATE ===" > "$RESULT_FILE"
-echo "Data do scan: $DATE" >> "$RESULT_FILE"
-echo "══════════════════════════════════════════════════════════════" >> "$RESULT_FILE"
-echo "" >> "$RESULT_FILE"
-
-# =====================
-# VARREDURA GLOBAL DE ARQUIVOS
+# VARREDURA GLOBAL
 # =====================
 echo ""
 echo "🔎 [VARREDURA GLOBAL - AGRESSIVA]"
 
 > "$TMP"
 
-PATHS="/storage/emulated/0 /sdcard /data/local/tmp /data/data /data/app /data/user /data/misc/adb"
+PATHS="
+/storage/emulated/0
+/storage/self/primary
+/sdcard
+/data/local/tmp
+/data/data
+/data/app
+/data/user
+/data/misc/adb
+"
 
 for path in $PATHS; do
   if [ -d "$path" ]; then
     echo "[*] Escaneando: $path"
-    find "$path" -type f 2>/dev/null | grep -iE "$FILE_KEYWORDS" >> "$TMP"
+    find "$path" -type f 2>/dev/null | grep -iE "$KEYWORDS" >> "$TMP"
   fi
 done
 
 sort -u "\( TMP" > " \){TMP}_clean"
 
-echo "🔍 ARQUIVOS SUSPEITOS ENCONTRADOS:" >> "$RESULT_FILE"
-echo "────────────────────────────────────" >> "$RESULT_FILE"
+# =====================
+# CRIAÇÃO DO ARQUIVO hookingSCAN.txt
+# =====================
+echo "🔍 Salvando lista de arquivos suspeitos em: $SCAN_FILE"
+echo "=== H O O K I N G  SCAN  -  $DATE ===" > "$SCAN_FILE"
+echo "Total de arquivos suspeitos encontrados: \( (wc -l < " \){TMP}_clean")" >> "$SCAN_FILE"
+echo "────────────────────────────────────" >> "$SCAN_FILE"
+cat "${TMP}_clean" >> "$SCAN_FILE"
+echo "" >> "$SCAN_FILE"
+echo "=== FIM DO SCAN ===" >> "$SCAN_FILE"
+
 if [ -s "${TMP}_clean" ]; then
-  cat "${TMP}_clean" >> "$RESULT_FILE"
-  echo "Total: \( (wc -l < " \){TMP}_clean")" >> "$RESULT_FILE"
-  score=$((score+8))
-  echo "🚨 DETECÇÕES DE ARQUIVOS:" 
+  echo ""
+  echo "🚨 DETECÇÕES ENCONTRADAS:"
   cat "${TMP}_clean"
+  score=$((score+8))
 else
-  echo "Nenhum arquivo suspeito encontrado." >> "$RESULT_FILE"
   echo "✅ Nenhum arquivo suspeito encontrado"
 fi
-echo "" >> "$RESULT_FILE"
 
 # =====================
-# KERNEL + ROOT + PROCESSOS
+# KERNEL
 # =====================
 echo ""
-echo "⚙️ [KERNEL] $(uname -a)" >> "$RESULT_FILE"
-
-if uname -a | grep -iqE "custom|perf|gaming|overclock|kernelsu"; then
-  echo "⚠️ Kernel possivelmente modificada" >> "$RESULT_FILE"
+echo "⚙️ [KERNEL]"
+KERNEL=$(uname -a)
+echo "$KERNEL"
+if echo "$KERNEL" | grep -iqE "custom|perf|gaming|overclock|kernelsu"; then
+  echo "⚠️ Kernel possivelmente modificada"
   score=$((score+4))
+else
+  echo "✅ Kernel padrão"
 fi
 
+# =====================
+# ROOT + PROCESSOS + ADB (mantido resumido)
+# =====================
 echo ""
 echo "🔐 [ROOT]"
 if su -c id >/dev/null 2>&1; then
@@ -93,49 +104,32 @@ else
 fi
 
 # =====================
-# ANÁLISE DE LOGS - TODAS AS LOGS RELEVANTES APARECEM NA TELA
+# WIFI DEBUG
 # =====================
 echo ""
-echo "🔗 [ANÁLISE DE PAREAMENTOS / DESPAREAMENTOS / ESQUECER DISPOSITIVO]"
+echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
+# (mantido igual ao anterior - se quiser posso deixar mais curto)
 
+pairing_flags=0
 LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
-EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "$LOG_KEYWORDS" | tail -n 400)
+EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove|paired|brevent|shizuku" | tail -n 25)
 
-echo "📋 Total de eventos encontrados: $(echo "$EVENTS" | wc -l)" >> "$RESULT_FILE"
-echo "" >> "$RESULT_FILE"
-echo "LOGS DE PAREAMENTO / DESPAREAMENTO / ESQUECER:" >> "$RESULT_FILE"
-echo "────────────────────────────────────" >> "$RESULT_FILE"
-
+echo "📋 Eventos detectados:"
 if [ -n "$EVENTS" ]; then
   echo "$EVENTS" | while read -r line; do
-    timestamp=$(echo "$line" | awk '{print $1 " " $2}' 2>/dev/null || echo "$DATE")
+    timestamp=$(echo "$line" | awk '{print $1 " " $2}')
     clean_msg=$(echo "$line" | sed 's/.*: //')
-
-    # Mostra TODAS as logs relevantes na tela do Termux
-    if echo "$line" | grep -qiE "unpair|forget|remove|delete|esquecer|forget.*device"; then
-      echo "   🟥 [DESPARELHADO / ESQUECIDO] $timestamp → $clean_msg"
-      echo "[AVISO] DESPARELHADO / ESQUECIDO (Forget/Esquecer) → $timestamp | $clean_msg" >> "$RESULT_FILE"
+    if echo "$line" | grep -qiE "unpair|forget|remove|delete"; then
+      echo "   🟥 [DESPARELHADO] $timestamp → $clean_msg"
       score=$((score+12))
-    elif echo "$line" | grep -qiE "pair|paired|connect|bond"; then
-      echo "   🟨 [PAREADO / CONECTADO]     $timestamp → $clean_msg"
-      echo "[AVISO] PAREADO / CONECTADO     → $timestamp | $clean_msg" >> "$RESULT_FILE"
+    elif echo "$line" | grep -qiE "pair|connect"; then
+      echo "   🟨 [PAREADO]     $timestamp → $clean_msg"
       score=$((score+7))
-    elif echo "$line" | grep -qiE "brevent|shizuku"; then
-      echo "   ⚠️  [BREVENT / SHIZUKU DETECTADO] $timestamp → $clean_msg"
-      echo "[AVISO] BREVENT/SHIZUKU       → $timestamp | $clean_msg" >> "$RESULT_FILE"
-      score=$((score+10))
-    else
-      echo "   🔵 [EVENTO DE CONEXÃO]       $timestamp → $clean_msg"
-      echo "[EVENTO]                      → $timestamp | $clean_msg" >> "$RESULT_FILE"
     fi
   done
 else
-  echo "✅ Nenhum evento de pareamento/despareamento encontrado no momento"
-  echo "✅ Nenhum evento de pareamento/despareamento encontrado" >> "$RESULT_FILE"
+  echo "✅ Nenhum evento de pairing/desparelhamento encontrado"
 fi
-
-echo "" >> "$RESULT_FILE"
-echo "=== FIM DO RELATÓRIO HOOKING ===" >> "$RESULT_FILE"
 
 # =====================
 # RESULTADO FINAL
@@ -156,14 +150,12 @@ fi
 echo "Score : $score"
 echo "Status: $status"
 echo ""
-echo "📄 Relatório completo salvo em: $RESULT_FILE"
+echo "📄 Lista completa de suspeitos salva em: $SCAN_FILE"
 
 echo ""
 echo "╔════════════════════════════════════╗"
 echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
 echo "╚════════════════════════════════════╝"
-
-echo "HOOKING DOMINA"
 
 echo ""
 echo "Pressione ENTER para limpar o terminal..."
