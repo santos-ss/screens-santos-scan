@@ -1,147 +1,166 @@
-cat > hooking.sh << 'EOL'
 #!/bin/bash
-# ================================================
-# SCAN ANTI-CHEAT FREE FIRE - Versão Shell
-# Autor: santos-ss + Grok
-# Inclui: Root, Xposed, VirtualApp, GG, Lucky Patcher, Wallhack, MReplays
-# ================================================
 
-clear
-echo -e "\e[36m"
-echo "  KellerSS Android Fucking Cheaters"
-echo "  discord.gg/allianceoficial"
-echo -e "\e[0m"
-echo "══════════════════════════════════════"
-echo "     SCAN ANTI-CHEAT FREE FIRE"
-echo "══════════════════════════════════════"
-echo ""
+echo "╔════════════════════════════════════╗"
+echo "║         🔍 H O O K I N G           ║"
+echo "╚════════════════════════════════════╝"
 
-RESULT="/sdcard/resultSCAN.txt"
-DATE=$(date '+%Y-%m-%d %H:%M:%S')
+LOG="/sdcard/scan_log.txt"
+TMP="/sdcard/scan_tmp.txt"
+SCAN_FILE="/sdcard/hookingSCAN.txt"   # ← Novo arquivo solicitado
+DATE=$(date +"%Y-%m-%d %H:%M:%S")
+
 score=0
 
-echo "Data/Hora: $DATE" > "$RESULT"
-echo "Dispositivo: $(getprop ro.product.model)" >> "$RESULT"
-echo "" >> "$RESULT"
-
-# Funções de cores
-red() { echo -e "\e[31m$1\e[0m"; }
-green() { echo -e "\e[32m$1\e[0m"; }
-yellow() { echo -e "\e[33m$1\e[0m"; }
-cyan() { echo -e "\e[36m$1\e[0m"; }
-
-# 1. ROOT
-echo "[1] VERIFICANDO ROOT"
-if su -c id >/dev/null 2>&1 || [ -f /data/adb/magisk ]; then
-    red "✗ ROOT DETECTADO ATIVO"
-    echo "[ROOT] ROOT DETECTADO" >> "$RESULT"
-    score=$((score + 15))
-else
-    green "✓ Sem root ativo"
-fi
 echo ""
+echo "📅 $DATE"
+echo "──────────────────────────────"
 
-# 2. XPOSED / LSPOSED
-echo "[2] VERIFICANDO XPOSED / LSPOSED"
-if [ -d /data/adb/lsposed ] || [ -d /data/adb/xposed ]; then
-    red "✗ XPOSED/LSPOSED DETECTADO"
-    echo "[XPOSED] Detectado" >> "$RESULT"
-    echo "Xposed_Detectado.txt" > "/sdcard/Xposed_Detectado.txt"
-    score=$((score + 12))
-else
-    green "✓ Sem Xposed/LSPosed"
-fi
+# =====================
+# KEYWORDS
+# =====================
+KEYWORDS="magisk|root|su|zygisk|frida|xposed|hook|inject|cheat|lsposed|shamiko|kernelsu|apatch|magiskhide|busybox|supersu"
+
+# =====================
+# VARREDURA GLOBAL
+# =====================
 echo ""
+echo "🔎 [VARREDURA GLOBAL - AGRESSIVA]"
 
-# 3. VIRTUAL APPS
-echo "[3] VERIFICANDO VIRTUAL APPS"
-if [ -d /sdcard/Android/data/com.vmos ] || [ -d /sdcard/Android/data/com.f1vm ] || [ -d /sdcard/Android/data/io.virtualapp ]; then
-    red "✗ VIRTUAL APP DETECTADO (VMOS/F1VM/etc)"
-    echo "[VIRTUAL] Detectado" >> "$RESULT"
-    echo "VirtualApp_Detectado.txt" > "/sdcard/VirtualApp_Detectado.txt"
-    score=$((score + 15))
+> "$TMP"
+
+PATHS="
+/storage/emulated/0
+/storage/self/primary
+/sdcard
+/data/local/tmp
+/data/data
+/data/app
+/data/user
+/data/misc/adb
+"
+
+for path in $PATHS; do
+  if [ -d "$path" ]; then
+    echo "[*] Escaneando: $path"
+    find "$path" -type f 2>/dev/null | grep -iE "$KEYWORDS" >> "$TMP"
+  fi
+done
+
+sort -u "\( TMP" > " \){TMP}_clean"
+
+# =====================
+# CRIAÇÃO DO ARQUIVO hookingSCAN.txt
+# =====================
+echo "🔍 Salvando lista de arquivos suspeitos em: $SCAN_FILE"
+echo "=== H O O K I N G  SCAN  -  $DATE ===" > "$SCAN_FILE"
+echo "Total de arquivos suspeitos encontrados: \( (wc -l < " \){TMP}_clean")" >> "$SCAN_FILE"
+echo "────────────────────────────────────" >> "$SCAN_FILE"
+cat "${TMP}_clean" >> "$SCAN_FILE"
+echo "" >> "$SCAN_FILE"
+echo "=== FIM DO SCAN ===" >> "$SCAN_FILE"
+
+if [ -s "${TMP}_clean" ]; then
+  echo ""
+  echo "🚨 DETECÇÕES ENCONTRADAS:"
+  cat "${TMP}_clean"
+  score=$((score+8))
 else
-    green "✓ Sem Virtual Apps"
+  echo "✅ Nenhum arquivo suspeito encontrado"
 fi
-echo ""
 
-# 4. GAME GUARDIAN
-echo "[4] VERIFICANDO GAME GUARDIAN"
-if ps -ef 2>/dev/null | grep -E "gameguardian|ggapp" | grep -v grep >/dev/null; then
-    red "✗ GAME GUARDIAN EM EXECUÇÃO"
-    echo "GameGuardian_Detectado.txt" > "/sdcard/GameGuardian_Detectado.txt"
-    score=$((score + 18))
+# =====================
+# KERNEL
+# =====================
+echo ""
+echo "⚙️ [KERNEL]"
+KERNEL=$(uname -a)
+echo "$KERNEL"
+if echo "$KERNEL" | grep -iqE "custom|perf|gaming|overclock|kernelsu"; then
+  echo "⚠️ Kernel possivelmente modificada"
+  score=$((score+4))
 else
-    green "✓ Sem Game Guardian"
+  echo "✅ Kernel padrão"
 fi
-echo ""
 
-# 5. LUCKY PATCHER
-echo "[5] VERIFICANDO LUCKY PATCHER"
-if [ -d /sdcard/LuckyPatcher ]; then
-    red "✗ LUCKY PATCHER DETECTADO"
-    echo "LuckyPatcher_Detectado.txt" > "/sdcard/LuckyPatcher_Detectado.txt"
-    score=$((score + 17))
+# =====================
+# ROOT + PROCESSOS + ADB (mantido resumido)
+# =====================
+echo ""
+echo "🔐 [ROOT]"
+if su -c id >/dev/null 2>&1; then
+  echo "❌ ROOT ATIVO"
+  score=$((score+10))
 else
-    green "✓ Sem Lucky Patcher"
+  echo "✅ Sem root ativo"
 fi
-echo ""
 
-# 6. WALLHACK (Otimizado)
-echo "[6] VERIFICANDO WALLHACK / HOLOGRAMA"
-if [ -d "/sdcard/Android/data/$pacote/files/contentcache/Optional/android/gameassetbundles" ] 2>/dev/null; then
-    yellow "⚠ Possível Wallhack - pasta de shaders encontrada"
-    echo "Wallhack_Detectado.txt" > "/sdcard/Wallhack_Detectado.txt"
-    score=$((score + 20))
+echo ""
+echo "🧠 [PROCESSOS]"
+if ps -ef 2>/dev/null | grep -E "frida-server|xposed|zygisk|magisk|shizuku|brevent" >/dev/null; then
+  echo "🚨 Processo suspeito em execução"
+  score=$((score+8))
 else
-    green "✓ Sem sinais claros de Wallhack"
+  echo "✅ Processos limpos"
 fi
-echo ""
 
-# 7. MREPLAYS (Otimizado)
-echo "[7] VERIFICANDO MREPLAYS"
-mreplays_dir="/sdcard/Android/data/$pacote/files/MReplays"
-if [ -d "$mreplays_dir" ]; then
-    if ls "$mreplays_dir"/*.bin >/dev/null 2>&1; then
-        red "✗ ARQUIVOS .bin encontrados em MReplays (Replay suspeito)"
-        echo "MReplays_Detectado.txt" > "/sdcard/MReplays_Detectado.txt"
-        score=$((score + 22))
-    else
-        yellow "⚠ Pasta MReplays existe, mas sem arquivos .bin"
+# =====================
+# WIFI DEBUG
+# =====================
+echo ""
+echo "🔗 [WIFI DEBUG / PAIRING RECENTE]"
+# (mantido igual ao anterior - se quiser posso deixar mais curto)
+
+pairing_flags=0
+LOGCAT_FULL=$(logcat -b all -d 2>/dev/null)
+EVENTS=$(echo "$LOGCAT_FULL" | grep -iE "AdbDebuggingManager|wireless|pairing|unpair|forget|remove|paired|brevent|shizuku" | tail -n 25)
+
+echo "📋 Eventos detectados:"
+if [ -n "$EVENTS" ]; then
+  echo "$EVENTS" | while read -r line; do
+    timestamp=$(echo "$line" | awk '{print $1 " " $2}')
+    clean_msg=$(echo "$line" | sed 's/.*: //')
+    if echo "$line" | grep -qiE "unpair|forget|remove|delete"; then
+      echo "   🟥 [DESPARELHADO] $timestamp → $clean_msg"
+      score=$((score+12))
+    elif echo "$line" | grep -qiE "pair|connect"; then
+      echo "   🟨 [PAREADO]     $timestamp → $clean_msg"
+      score=$((score+7))
     fi
+  done
 else
-    green "✓ MReplays normal"
+  echo "✅ Nenhum evento de pairing/desparelhamento encontrado"
 fi
+
+# =====================
+# RESULTADO FINAL
+# =====================
 echo ""
+echo "════════ RESULTADO ════════"
 
-# Resumo Final
-echo "══════════════════════════════════════"
-echo "               RESUMO FINAL"
-echo "══════════════════════════════════════"
-if [ $score -ge 60 ]; then
-    red "💀 CRÍTICO - ALTO RISCO DE CHEAT"
-elif [ $score -ge 40 ]; then
-    yellow "🚨 SUSPEITO FORTE"
-elif [ $score -ge 25 ]; then
-    yellow "⚠️ ATENÇÃO"
+if [ $score -ge 25 ]; then
+  status="💀 CRITICO"
+elif [ $score -ge 15 ]; then
+  status="🚨 SUSPEITO"
+elif [ $score -ge 8 ]; then
+  status="⚠️ ATENÇÃO"
 else
-    green "✅ DISPOSITIVO PARECE LIMPO"
+  status="✅ LIMPO"
 fi
 
-echo -e "\nScore de risco: $score"
-echo "Relatório completo salvo em: /sdcard/resultSCAN.txt"
-echo "Arquivos de detecção criados na pasta /sdcard/"
+echo "Score : $score"
+echo "Status: $status"
+echo ""
+echo "📄 Lista completa de suspeitos salva em: $SCAN_FILE"
 
-echo "" >> "$RESULT"
-echo "Score final: $score" >> "$RESULT"
-echo "=== FIM DO SCAN ===" >> "$RESULT"
+echo ""
+echo "╔════════════════════════════════════╗"
+echo "║     ✔ SCAN FINALIZADO (HOOKING)    ║"
+echo "╚════════════════════════════════════╝"
 
-echo -e "\nPressione ENTER para sair..."
+echo ""
+echo "Pressione ENTER para limpar o terminal..."
 read -r
-clear
-EOL
 
-chmod +x scan_hooking.sh
-echo "✅ Arquivo criado com sucesso!"
-echo "Para rodar use o comando:"
-echo -e "\e[32m./scan_hooking.sh\e[0m"
+clear
+reset
+echo "Terminal limpo e resetado."
